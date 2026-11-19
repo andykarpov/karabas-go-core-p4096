@@ -90,9 +90,13 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ (2M×16), SDRAM 32 МБ
   - Схема расходится с README в порядке битов #7FFD (бит 6 младше бита 7, как в Pentagon-512) — берём схему.
   - Яркость бордюра пишется адресом: запись в #F6 (A3 = 0) — яркий, в #FE — обычный.
   - Палитра: выходы К155РУ2 инверсные (как ATM Turbo 2+), запись только вне TR-DOS.
-- [x] `docs/QUESTIONS.md` — 13 вопросов автору (лицензия, ASCII-схема, BIOS 64 КБ, #7FFD, 384×304, FlashColor, 16 colors, INT, WAIT, палитра, программы).
+- [x] BIOS v4.2 дизассемблирован (HW.md): сброс в 512×192 моно, схема памяти 5, палитра таблицей — инверсия и раскладка бит подтверждены (уровни 0 / 10 / 15).
+- [ ] Ещё по схеме до RTL Ф1: выбор ПЗУ (страницы {`MODE_3+`, `SRA15`, `SRA14`}, защёлка Gluk `/RSGLK`, DD49, DD56), `IORQG` (приоритет NemoBus), точные строка / столбец INT и бумаги и длина INT (DD5-DD10, DD20, DD22, `HC`), WAIT турбо 14 (`WAITP`) и AY (`WAITA`), чтение #FE / #FF.
+- [ ] До RTL Ф3 (перенесено): статическое ОЗУ / кэш (`HLOAD`, `HRMP`, `/CC_ON`, `SRCS`, `BRCS`, DD58), страницы BIOS (`BPAGE`), запись / стирание флеш-ПЗУ (`RFLASH`, `RERASE`), #FB / #7B, многозадачность (ош. 9).
+- [ ] Тема автора на zx-pk.ru «Pentagon-1024/4096 от Northwood» (28489, 31+ стр.) — прочитать описания режимов и INT.
+- [x] `docs/QUESTIONS.md` — 16 вопросов автору (лицензия, ASCII-схема, BIOS 64 КБ, #7FFD, 384×304, FlashColor, 16 colors, INT, WAIT, палитра, программы).
 - [x] Модель видео `src/tools/p4096_vmodel.py` (по README + `video_modes.txt`, проверена по разбору схемы): все 9 режимов, палитра, FlashColor (смесь 1:3), GigaScreen, блок многозадачности; `python3 -I src/tools/p4096_vmodel.py demo DIR` рисует каждый режим на случайной памяти (4 с). Порядок пикселей 16 colors и углы 384×304 — по вопросам 5 и 7.
-- [x] Эталоны: Unreal Speccy (unreal-ng, `emu-shot unreal --machine PENTAGON`) и ZEsarUX (`Pentagon`) — тайминг Pentagon-128, #7FFD, TR-DOS. Режимов Pentagon-4096 нет нигде.
+- [x] Эталоны: Unreal Speccy (unreal-ng, `emu-shot unreal --machine PENTAGON`) и ZEsarUX (`Pentagon`) — тайминг Pentagon-128, #7FFD, TR-DOS. unreal-ng Pentagon 1024: «#EFF7: 16c / 128K lock / RAM0 / turbo off / multicolor / clock enable» — те же D0 / D3 / D5 / D7, что у Pentagon-4096 → эталон 16 colors и мультиколора (сверить порядок пикселей, вопрос 7); ZEsarUX `--enable16c` (Pentagon 16C). 512×192, 384×304, FlashColor, GigaScreen, палитры Pentagon-4096 в эмуляторах пока не нашёл.
 - [x] ROM (16 КБ страницы):
 
 | Стр. | Что | Файл |

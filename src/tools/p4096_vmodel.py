@@ -54,10 +54,10 @@ class Regs:
 
 
 def std_palette():
-    """Index (bit 0 B, 1 R, 2 G, 3 bright) -> 12 bit RGB; levels CHECK against the BIOS v4.2 init."""
+    """Index (bit 0 B, 1 R, 2 G, 3 bright) -> 12 bit RGB; levels 10 / 15 as the BIOS v4.2 palette table (2F34)."""
     pal = []
     for i in range(16):
-        lv = 0xF if i & 8 else 0xC
+        lv = 0xF if i & 8 else 0xA
         b, r, g = (i & 1) * lv, ((i >> 1) & 1) * lv, ((i >> 2) & 1) * lv
         pal.append((r << 8) | (g << 4) | b)
     return pal
