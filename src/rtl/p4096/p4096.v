@@ -312,7 +312,8 @@ end
 assign kbd_a = a[15:8];
 
 // ---------------- sound ----------------
-// ABC stereo: A left, C right, B in both at half. The sum is unsigned; minus its middle = signed.
+// ABC stereo: A left, C right, B in both at half. The sum is unsigned and goes out as a positive signed value:
+// silence = 0 (with the middle subtracted the board gave a DC of -10240 in silence, hw 2026-11-20).
 reg [11:0] sum_l = 12'd0, sum_r = 12'd0;
 reg tape_in_r = 1'b0;
 always @(posedge clk) begin
@@ -321,8 +322,8 @@ always @(posedge clk) begin
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
 	sum_r <= {4'd0, s0c} + {4'd0, s1c} + {5'd0, s0b[7:1]} + {5'd0, s1b[7:1]} +
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
-	audio_l <= {sum_l, 4'd0} - 16'd10240;
-	audio_r <= {sum_r, 4'd0} - 16'd10240;
+	audio_l <= {sum_l, 4'd0};
+	audio_r <= {sum_r, 4'd0};
 end
 
 endmodule
