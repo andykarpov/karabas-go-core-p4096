@@ -135,7 +135,7 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ (2M×16), SDRAM 32 МБ
 - Схема HW.md: `SRA14` = gl и (`T_DOS` или `SPAGE0`) (без инверсии; проверено загрузкой).
 - Плата Mini G (сборка 26112001, 5 699 LUT / 37 %, 3 RAMB16, тайминг выполнен и в режиме ядра): меню 128 на HDMI, 128 BASIC с USB-клавиатуры, `BORDER 2` (красный бордюр), `PLAY "cdefgab"` — ноты AY в левом канале HDMI-звука; после сброса с CPU 14 МГц меню снова грузится (что пункт OSD применился, не подтверждено). Найдено: в тишине звук имел сдвиг −10240 — исправлено (тишина = 0), в следующей сборке.
 - Отзыв пользователя по OSD (2026-11-20): CPU, INT, Magic, Reset — ок; «INT X corr» и подписи значений пунктов не нравятся — обсудить; джойстиков два: Joystick L / Joystick R с вариантами profi / tsconf (Kempston, Sinclair1, Sinclair2, Cursor, QAOPM, QAOPS), по умолчанию L = Kempston, R = Sinclair1 (Sinclair и Cursor — через hid_parser JOY_TYPE, как в tsconf). Игры с ленты пока не проверяем.
-- OSD Ф1: CPU, INT (Pentagon / Firm), INT X corr (Off / XJ3 −2T), Joystick (Kempston / Off), Magic (F11), Reset (F12) — кадр показать пользователю до мержа.
+- OSD Ф1 (решение пользователя 2026-11-20): Turbo (Off / 7 MHz / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T: XJ3 вошёл в пункт INT), Joystick L / R (Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS, по умолчанию Kempston / Sinclair1; через `hid_parser`, как tsconf), Magic (F11), Reset (F12) — кадр показать до мержа.
 
 ### Ф2 — видеорежимы и палитра (ветка f2-video)
 
@@ -163,7 +163,7 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 
 ## OSD (набросок, показать пользователю до мержа Ф1)
 
-- Ф1: CPU (3.5 / 7 / 14 MHz), INT (Pentagon / Firm), INT X corr (как XJ3), Joystick, Reset (Menu+F12), Magic (F11).
+- Ф1: Turbo (Off / 7 / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T), Joystick L / R, Magic (F11), Reset (F12).
 - Ф2: 512 Ink (цвет и яркость), 512 Colour, FlashColor, GigaScreen auto, Palette (On / Off, как XJ1-XJ3 TopBoard), Video out (по Ф0).
 - Ф3: Memory (схемы 0-6 #FC37), 7FFD D5 (Lock / Ext), +3 mode, Multitask, ROM emu (страницы #FD37), Reset to (Gluk / Menu-128 / TR-DOS / TR-DOS keep / BASIC 48 / HDD), Boot (Direct / BIOS).
 - Ф4: FDD A-D (образы), HDD Master / Slave (образы), GS, TurboSound / FM, SoundDrive, Mouse.
