@@ -38,7 +38,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112017",
+            "build": "26112018",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -421,7 +421,7 @@
         {
             "type": "FL",
             "name": "OPL4 ROM",
-            "slot": 1,
+            "slot": 6,
             "exts": [
                 "rom",
                 "bin"

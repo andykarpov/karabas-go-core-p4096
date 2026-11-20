@@ -410,8 +410,9 @@ wire gs_rd_n, gs_wr_n, gs_done, gs_oe_i, gs_oe;
 wire gs_req = !gs_rd_n || !gs_wr_n;
 wire signed [14:0] gs_l, gs_r;
 // ---------- OPL4 (ZXM-MoonSound, opl4_kg of core-baseconf): the declarations for the storage ----------
-// The FL item "OPL4 ROM" (slot 1): the YRW801 ROM into the sample memory (port 2 of the storage, at 400000)
-wire fl_act = ld_active && ld_kind == 2'd2 && ld_slot == 8'd1;
+// The FL item "OPL4 ROM" (slot 6: 0-3 are the floppies, 4-5 the hard disks, the slots are shared by F and FL
+// items): the YRW801 ROM into the sample memory (port 2 of the storage, at 400000)
+wire fl_act = ld_active && ld_kind == 2'd2 && ld_slot == 8'd6;
 wire fl_wr = ld_wr && fl_act;
 wire [21:0] opl4_mem_addr;
 wire opl4_mem_req, opl4_mem_we, opl4_mem_ack;
