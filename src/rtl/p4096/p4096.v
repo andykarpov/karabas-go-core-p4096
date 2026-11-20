@@ -26,7 +26,7 @@ module p4096 (
 	// settings (OSD)
 	input  wire [1:0]  turbo,         // 0 3.5, 1 7, 2 14 MHz
 	input  wire        int_firm,      // OSD: the value of #FE37 D7 (INT_SEL) at reset and when the OSD changes it
-	input  wire [6:0]  fe37_init,     // #FE37 D0-D6 at reset (BIOS v4.2 writes 07: 512 ink white)
+	input  wire [6:0]  fe37_init,     // OSD: #FE37 D0-D6 at reset and when the OSD changes them (BIOS v4.2: 07)
 	input  wire        pal_en,        // OSD Palette: 0 = the standard 16 colours (XJ1-XJ3 of the TopBoard)
 	input  wire        int_xj3,       // the XJ3 jumper: INT 2 T earlier
 	input  wire        nmi,           // Magic (1: NMI held)
@@ -165,8 +165,8 @@ always @(posedge clk) begin
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
 		eff7 <= 8'd0; fc37 <= 8'd0; fd37 <= 8'd0; ff37 <= 8'd0;
 		fe37 <= {int_firm, fe37_init};
-	end else if (int_firm != int_firm_d) begin
-		fe37[7] <= int_firm;                   // the OSD changed INT
+	end else if ({int_firm, fe37_init} != osd_fe37_d) begin
+		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
 	end else if (iowr_s) begin
 		if (p_eff7) eff7 <= cpu_do;
 		if (p_bios)
@@ -195,8 +195,8 @@ always @(posedge clk) begin
 	end
 end
 
-reg int_firm_d = 1'b0;
-always @(posedge clk) int_firm_d <= int_firm;
+reg [7:0] osd_fe37_d = 8'd0;
+always @(posedge clk) osd_fe37_d <= {int_firm, fe37_init};
 
 // palette (TopBoard): #xxFF write outside TR-DOS with #FF37 D5 (PAL_ON); B = D0 D5 A8 A13, R = D1 D6 A9 A14,
 // G = D4 D7 A12 A15 (the high bit first); the K155RU2 outputs are inverted: the level is the inverse

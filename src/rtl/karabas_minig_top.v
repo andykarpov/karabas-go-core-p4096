@@ -201,7 +201,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 6;
+localparam SW_N = 12;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -349,6 +349,14 @@ wire sw_int_firm = sw_int[1];
 wire sw_int_xj3 = sw_int[0];
 wire [2:0] sw_joy_l = softsw[4*8 +: 3];  // 4, 5 Joystick L / R: Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS
 wire [2:0] sw_joy_r = softsw[5*8 +: 3];  //   (the codes of JOY_TYPE of hid_parser, as core-tsconf / core-profi)
+// 6..9: the reset values of #FE37 (what BIOS Setup sets): 512 Ink (index I G R B), 512 mode Mono / Colour,
+// FlashColor Off / On, GigaScreen Off / On; 10 Palette On / Off; 11 Video 720x576 / 768x608
+wire [3:0] sw_ink512 = softsw[6*8 +: 4];
+wire sw_col512 = softsw[7*8];
+wire sw_flashcol = softsw[8*8];
+wire sw_giga = softsw[9*8];
+wire sw_pal_off = softsw[10*8];
+wire sw_video_full = softsw[11*8];
 wire [1:0] hw_btn = mcu_btns[1:0];
 
 // ---------- the ROM loader and the storage (SDRAM) ----------
@@ -436,6 +444,8 @@ p4096 p4096 (
 	.turbo			(sw_cpu),
 	.int_firm		(sw_int_firm),
 	.int_xj3			(sw_int_xj3),
+	.fe37_init		({sw_giga, sw_flashcol, sw_col512, sw_ink512}),
+	.pal_en			(!sw_pal_off),
 	.nmi				(magic),
 	.kbd_a			(kbd_a),
 	.kbd_d			(kbd_do[4:0]),
@@ -498,6 +508,7 @@ p4096_scandbl scandbl (
 	.dot_line		(dot_line),
 	.dot_rgb			(dot_rgb),
 	.line_start		(line_start),
+	.full				(sw_video_full),
 	.r					(video_r),
 	.g					(video_g),
 	.b					(video_b),
