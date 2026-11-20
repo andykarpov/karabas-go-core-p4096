@@ -469,10 +469,14 @@ wire [7:0] int_t = int_xj3 ? int_t0 - 8'd2 : int_t0;
 wire [5:0] hrel = (h >= 6'd16) ? h - 6'd16 : h + 6'd40;
 wire [7:0] line_t = {hrel, px[2:1]};        // the T of the line (0..223)
 assign int_go = (v == int_v) && (line_t == int_t) && !px[0] && (ph == 2'd0);
+// /INT ends at the acknowledge (INTA: /IORQ and /M1, DD12:3 resets DD23:2) or after 32 T at the latest (HC). The
+// acknowledge matters in turbo: a short handler would take INT twice (the CPU speed test of BIOS v4.2 read 0 %).
 reg [7:0] int_cnt = 8'd0;     // 32 T = 256 clocks
 always @(posedge clk) begin
 	if (int_go)
 		int_cnt <= 8'd255;
+	else if (!iorq_n && !m1_n)
+		int_cnt <= 8'd0;
 	else if (int_cnt != 8'd0)
 		int_cnt <= int_cnt - 8'd1;
 	int_n <= !(int_cnt != 8'd0 || int_go);
