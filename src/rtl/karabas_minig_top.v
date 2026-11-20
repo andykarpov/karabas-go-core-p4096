@@ -177,6 +177,12 @@ IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
 BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 
 wire [55:0] mcu_kbd;
+// the Nemo IDE bus of the machine (the CF card and hdf_ata below)
+wire [2:0] ide_a;
+wire [1:0] ide_cs_n;
+wire ide_rd_n, ide_wr_n;
+wire [15:0] ide_dout, ide_din, hdf_dout;
+
 // the image files of the mcu (kg_mcu2 ENABLE_IMG, img_sdc inside): HDF0 slot 4, HDF1 slot 5 (hdf_ata)
 wire [7:0] sdc_img_mounted, sdc_rd, sdc_wr, sdc_byte_in_data, sdc_byte_out_data;
 wire [63:0] sdc_img_size;
@@ -551,10 +557,6 @@ assign TAPE_OUT = tape_out;
 // As core-baseconf (ide_mux of the Profi core): the card is device 0 with HDD Master = CF card and gets the
 // strobes then; the read data come from the card when it is device 0 and selected, else from hdf_ata (device 0
 // with HDD Master = Image, device 1 always).
-wire [2:0] ide_a;
-wire [1:0] ide_cs_n;
-wire ide_rd_n, ide_wr_n;
-wire [15:0] ide_dout, ide_din, hdf_dout;
 wire hdf_dev, hdf_dev1_here, hdf_led;
 wire [1:0] hdf_rd, hdf_wr;
 wire [31:0] hdf_sector;
