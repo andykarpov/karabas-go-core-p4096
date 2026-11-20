@@ -2,7 +2,7 @@
 # p4096 machine simulations (Verilator, tb_p4096.v). Usage: src/sim/run_p4096_sim.sh [video|boot|int] [frames]
 #   video  the CPU in reset, random screen 5 in the RAM: frame 1 against src/tools/p4096_vmodel.py (seconds)
 #   boot   the ROM set of core.json, the 128 menu: PNG of the last frame (frames, default 60);
-#          TB_ARGS=+fc37=9a: the +3 mode (the +3 menu)
+#          TB_ARGS=+fc37=9a: the +3 mode (the +3 menu); TB_ARGS=+ff37=00: start BIOS v4.2
 #   modes  Ф2: all video modes, the palette, FlashColor, GigaScreen against p4096_vmodel.py (p4096_modes.py)
 #   mem    Ф3: the memory schemes 0-6 of #FC37 against the table of docs/HW.md (p4096_mem.py)
 #   int    INT against the raster: int_test.asm here and in unreal-ng PENTAGON (emu-shot), the border stripes
@@ -37,8 +37,8 @@ video)
 	;;
 boot)
 	cat "$SRC/roms/glukpen.rom" "$SRC/roms/tr5_03.rom" "$SRC/roms/128_std.rom" "$SRC/roms/basic48_128_std.rom" \
-		"$SRC/roms/plus341.rom" > "$OUT/rom.bin"
-	$F hex "$OUT/rom.bin" "$OUT/rom.hex" 131072
+		"$SRC/roms/plus341.rom" "$SRC/roms/bios42.rom" > "$OUT/rom.bin"
+	$F hex "$OUT/rom.bin" "$OUT/rom.hex" 147456
 	"$OUT/obj/tb" +frames="$N" +rom="$OUT/rom.hex" +dump="$OUT/boot.txt" +log="$OUT/boot.log" ${TB_ARGS} | tail -1
 	$F png "$OUT/boot.txt" "$OUT/boot.png"
 	echo "PNG: $OUT/boot.png"

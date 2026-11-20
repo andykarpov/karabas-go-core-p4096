@@ -20,7 +20,7 @@ reg [7:0] ram [0:4194303];   // 4 MB (the SRAM of the board)
 reg [7:0] rom [0:524287];   // 512 KB: the space of baseconf_storage (main ROM 0..127 KB, ...)
 integer i, frames, nframe, fd, fl, rom_lat;
 reg hold, firm, xj3, gl;
-reg [7:0] fc37;
+reg [7:0] fc37, ff37;
 reg [1:0] turbo;
 reg [8*256-1:0] fname;
 
@@ -28,7 +28,8 @@ wire [21:0] mem_a;
 wire mem_rd, mem_wr;
 wire [7:0] mem_d;
 reg [7:0] mem_q = 8'h00;
-wire rom_req;
+wire rom_req, rom_wr;
+wire [7:0] cpu_dout;
 wire [18:0] rom_addr;
 reg [7:0] rom_q = 8'h00;
 reg rom_done = 1'b0;
@@ -43,13 +44,13 @@ reg reset = 1'b1;
 
 p4096 dut (
 	.clk(clk), .reset(reset),
-	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(8'h03), .gl_init(gl),
+	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
 	.kbd_a(kbd_a), .kbd_d(5'b11111), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
-	.rom_req(rom_req), .rom_addr(rom_addr), .rom_q(rom_q), .rom_done(rom_done),
+	.rom_req(rom_req), .rom_addr(rom_addr), .rom_wr(rom_wr), .rom_q(rom_q), .rom_done(rom_done),
 	.dot_we(dot_we), .dot_x(dot_x), .dot_line(dot_line), .dot_rgb(dot_rgb), .line_start(line_start),
 	.audio_l(audio_l), .audio_r(audio_r),
-	.cpu_a(cpu_a), .cpu_m1_n(cpu_m1_n), .int_n_o(int_n)
+	.cpu_a(cpu_a), .cpu_dout(cpu_dout), .cpu_m1_n(cpu_m1_n), .int_n_o(int_n)
 );
 
 // RAM: the byte of a read in the next clock (the input register of the top); a write in its first clock
@@ -60,12 +61,14 @@ end
 
 // ROM: rom_done rom_lat clocks after rom_req with the same address
 reg [18:0] rom_tag = 19'h7FFFF;
+reg rom_wr_tag = 1'b0;
 integer rom_cnt = 0;
 always @(posedge clk) begin
 	if (!rom_req) begin
 		rom_done <= 1'b0;
 		rom_cnt <= 0;
-	end else if (rom_addr != rom_tag) begin
+	end else if (rom_addr != rom_tag || rom_wr != rom_wr_tag) begin
+		rom_wr_tag <= rom_wr;
 		rom_tag <= rom_addr;
 		rom_done <= 1'b0;
 		rom_cnt <= 1;
@@ -73,6 +76,7 @@ always @(posedge clk) begin
 		rom_cnt <= rom_cnt + 1;
 	else begin
 		rom_q <= rom[rom_addr];
+		if (rom_wr && !rom_done) rom[rom_addr] <= cpu_dout;
 		rom_done <= 1'b1;
 	end
 end
@@ -121,6 +125,7 @@ initial begin
 	if (!$value$plusargs("trace=%d", trace_n)) trace_n = 0;
 	if (!$value$plusargs("fc37=%h", fc37)) fc37 = 8'h1A;      // BIOS v4.2: scheme 5 (Profi + Pentagon), D5 latch
 	gl = !$test$plusargs("gluk");
+	if (!$value$plusargs("ff37=%h", ff37)) ff37 = 8'h23;      // what BIOS v4.2 leaves (00: start the BIOS)
 	if (!$value$plusargs("romlat=%d", rom_lat)) rom_lat = 6;
 	if (!$value$plusargs("turbo=%d", turbo)) turbo = 2'd0;
 	hold = $test$plusargs("hold");

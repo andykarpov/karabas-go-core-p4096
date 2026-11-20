@@ -30,9 +30,11 @@ module p4096 (
 	input  wire        pal_en,        // OSD Palette: 0 = the standard 16 colours (XJ1-XJ3 of the TopBoard)
 	input  wire [7:0]  fc37_init,     // OSD: #FC37 at reset (memory scheme, D5 latch, multitasking, +3)
 	input  wire [7:0]  ff37_init,     // #FF37 at reset: without BIOS 03 (BIOS ROM off, Gluk latch free), as BIOS leaves it
+	input  wire [7:0]  p7_init,       // #7FFD at reset (OSD Reset to: Menu-128 00, BASIC 48 30, TR-DOS 10)
+	input  wire        dos_init,      // TR-DOS at reset (OSD Reset to TR-DOS)
 	input  wire        gl_init,       // the Gluk latch at reset: 1 = the normal ROM pages, 0 = Gluk Reset Service
 	input  wire        int_xj3,       // the XJ3 jumper: INT 2 T earlier
-	input  wire        nmi,           // Magic (1: NMI held)
+	input  wire        nmi,           // Magic (the button / OSD: a rising edge starts it)
 
 	// keyboard (hid_parser: A15..A8 in, the columns out, active low), Kempston (active high: F U D L R)
 	output wire [7:0]  kbd_a,
@@ -52,6 +54,7 @@ module p4096 (
 	// ROM
 	output wire        rom_req,
 	output wire [18:0] rom_addr,
+	output wire        rom_wr,        // a write (static RAM, cache, the flash copy), data cpu_do
 	input  wire [7:0]  rom_q,
 	input  wire        rom_done,
 
@@ -68,6 +71,7 @@ module p4096 (
 
 	// debug / sim
 	output wire [15:0] cpu_a,
+	output wire [7:0]  cpu_dout,
 	output wire        cpu_m1_n,
 	output wire        int_n_o
 );
@@ -86,13 +90,14 @@ reg border_bri = 1'b0;
 reg [7:0] eff7 = 8'd0;
 reg [7:0] fc37 = 8'd0, fd37 = 8'd0, fe37 = 8'd0, ff37 = 8'd0;   // BIOS ports (write only)
 wire int_go;
+wire [4:0] scr_hi;
 wire pal_we;
 wire [11:0] pal_d;
 
 p4096_video video (
 	.clk(clk), .reset(1'b0), .pal_rst(reset),
 	.scr(scr), .border(border), .border_bri(border_bri),
-	.eff7(eff7), .fe37(fe37), .frame_latch(int_go), .pal_en(pal_en), .pal_we(pal_we), .pal_d(pal_d),
+	.eff7(eff7), .fe37(fe37), .scr_hi(scr_hi), .frame_latch(int_go), .pal_en(pal_en), .pal_we(pal_we), .pal_d(pal_d),
 	.vf_a(vf_a), .mem_q(mem_q),
 	.ph(ph), .px(px), .h(h), .v(v), .c5(c5),
 	.attr_port(attr_port),
@@ -116,12 +121,13 @@ wire mreq_n, iorq_n, rd_n, wr_n, m1_n, rfsh_n;
 wire wait_n;
 reg int_n = 1'b1;
 assign cpu_a = a;
+assign cpu_dout = cpu_do;
 assign cpu_m1_n = m1_n;
 assign int_n_o = int_n;
 
 z80s_t80pa cpu (
 	.RESET_n(!reset), .CLK(clk), .CEN_p(zpos), .CEN_n(zneg),
-	.WAIT_n(wait_n), .INT_n(int_n), .NMI_n(!nmi), .BUSRQ_n(1'b1),
+	.WAIT_n(wait_n), .INT_n(int_n), .NMI_n(!nmi_p), .BUSRQ_n(1'b1),
 	.M1_n(m1_n), .MREQ_n(mreq_n), .IORQ_n(iorq_n), .RD_n(rd_n), .WR_n(wr_n), .RFSH_n(rfsh_n),
 	.HALT_n(), .BUSAK_n(),
 	.A(a), .DI(cpu_di), .DO(cpu_do)
@@ -137,6 +143,8 @@ reg [2:0] dfd = 3'd0;          // #DFFD D0-D2 (DD79)
 reg rr_1f = 1'b0, shrom = 1'b0, ra15m = 1'b0, fd1_4 = 1'b0, fd1_7 = 1'b0;   // #1FFD Scorpion / KAY (DD80)
 reg p3_dos = 1'b0, p3_d1 = 1'b0, p3_d2 = 1'b0;                              // #1FFD +3 (DD81)
 reg trap = 1'b0;               // the IN A,(n) / OUT (n),A trap (DD72, DD68:2)
+wire rom_sel;                  // the CPU byte is not in the DRAM (memory map below)
+reg mcache = 1'b0;             // the Magic pulse (DD143:1, about 60 ms on the board)
 reg speaker = 1'b0;
 reg dos = 1'b0;                // T_DOS
 
@@ -182,7 +190,8 @@ always @(posedge clk) iowr_d <= iowr;
 
 always @(posedge clk) begin
 	if (reset) begin
-		p7_page <= 3'd0; scr <= 1'b0; spage0 <= 1'b0; p7_d5 <= 1'b0; p7_d6 <= 1'b0; p7_d7 <= 1'b0; p7_d5h <= 1'b0;
+		p7_page <= p7_init[2:0]; scr <= p7_init[3]; spage0 <= p7_init[4]; p7_d5 <= p7_init[5];
+		p7_d6 <= p7_init[6]; p7_d7 <= p7_init[7]; p7_d5h <= p7_init[5] && !fc37_init[4];
 		dfd <= 3'd0; rr_1f <= 1'b0; shrom <= 1'b0; ra15m <= 1'b0; fd1_4 <= 1'b0; fd1_7 <= 1'b0;
 		p3_dos <= 1'b0; p3_d1 <= 1'b0; p3_d2 <= 1'b0;
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
@@ -242,7 +251,9 @@ assign pal_d = ~{cpu_do[1], cpu_do[6], a[9], a[14], cpu_do[4], cpu_do[7], a[12],
 wire m1_fetch = !m1_n && !mreq_n;
 always @(posedge clk) begin
 	if (reset)
-		dos <= 1'b0;
+		dos <= dos_init;
+	else if (mcache)
+		dos <= 1'b1;                           // /MDOS: Magic forces TR-DOS
 	else if (m1_fetch) begin
 		if (a[15:14] != 2'b00)
 			dos <= 1'b0;
@@ -272,7 +283,8 @@ end
 // RAM in 0000-3FFF: #EFF7 D3 or #1FFD D0 (Scorpion), or the +3 special mode
 wire romram = eff7[3] || rr_1f;
 wire special = mode3 && p3_dos;
-wire rom_sel = (a[15:14] == 2'b00) && !romram && !special;
+// rom_sel (below): the CPU byte is not in the DRAM (ROMs, static RAM in the storage)
+
 // page bits 0..2 (DD82 / DD83)
 wire [2:0] pg_lo = special ? (p3_d2 ? {!(a[14] && a[15]), a[15] || (a[14] && p3_d1), a[14]} : {p3_d1, a[15], a[14]}) :
                    (a[15:14] == 2'b11) ? p7_page : {a[14], a[15], a[14]};
@@ -299,15 +311,45 @@ always @(*) begin
 	endcase
 end
 wire hram = (a[15:14] == 2'b11) || mtask;
+// SCR256K..SCR4M: the screens of the current 128 KB block in multitasking (DD87, DD88:1), block 0 otherwise
+assign scr_hi = mtask ? {mem4m, mem2m, mem1m, mem512, mem256} : 5'd0;
 wire [4:0] pg_hi = (hram && !trap) ? {mem4m, mem2m, mem1m, mem512, mem256} : 5'd0;
 wire [21:0] cpu_ma = {pg_hi, pg_lo, a[13:0]};
-// ROM page (DD52 / DD56): {MODE_3+, SRA15, SRA14}; gl = the Gluk latch (DD49)
+// ---------------- ROMs, static RAM, cache (docs/HW.md, scratchpad schematic reading of Ф3) ----------------
+// The storage (SDRAM, 16 KB pages): main ROM 0-7, BIOS ROM 8-11, static RAM 16-23.
+// Main ROM page (DD52 / DD56): {MODE_3+, SRA15, SRA14}; gl = the Gluk latch (DD49). RFLASH (#FF37 D6): any page
+// by {MODE_3+, MODE_3+ ? 1FD2_3+ : RA15M, SPAGE0}, for the reads too.
 reg gl1 = 1'b0, gl = 1'b1;
-wire [1:0] rom_lo = mode3 ? {p3_d2, spage0} :
+reg prnrom = 1'b0;                     // DD68:1: IN #FB sets, IN #7B clears, Magic sets
+wire rflash = ff37[6];
+wire [1:0] rom_lo = rflash ? {mode3 ? p3_d2 : ra15m, spage0} :
+                    mode3 ? {p3_d2, spage0} :
                     (shrom || !gl) ? 2'b00 : {!dos ^ ra15m, dos || spage0};
 wire [2:0] rom_page = {mode3, rom_lo};
-assign rom_addr = {2'b00, rom_page, a[13:0]};
-assign rom_req = rom_sel && !mreq_n && !rd_n;
+wire blkr = romram || special;                         // BLKR: the window 0000 is DRAM (no external card)
+wire w0 = (a[15:14] == 2'b00) && !blkr;
+wire rsp_on = rom_sp && !prnrom;                        // DD54:2
+wire emu = rsp_on && fd37[rom_page];                    // DD56: the ROM page from the static RAM (read only)
+wire cache_on = prnrom && !ff37[4] && !fd37[0];         // DD58 (BLKR is in w0)
+wire hld = fc37[5] && !p7_page[2] && (a[15:14] == 2'b11);   // HLOAD: static RAM at C000, #7FFD D1 D0, D2 = 0
+assign rom_sel = w0 || hld;
+wire st_wr = hld || (w0 && (cache_on || (rflash && rsp_on && !emu)));   // writable: static RAM, the flash
+reg [4:0] st_page;
+always @(*) begin
+	if (hld)
+		st_page = {2'b10, mode3, p7_page[1:0]};
+	else if (cache_on)
+		st_page = {2'b10, mode3, spage0 && !fd37[2], 1'b0};       // cache 32 KB (pages 0 / 2), 16 KB with HRMP2
+	else if (emu)
+		st_page = {2'b10, rom_page};
+	else if (rsp_on)
+		st_page = {2'b00, rom_page};
+	else
+		st_page = {3'b010, prnrom ? 2'b11 : ff37[3:2]};          // BIOS ROM (page 3 = the printer ROM)
+end
+assign rom_addr = {st_page, a[13:0]};
+assign rom_req = rom_sel && !mreq_n && (!rd_n || (!wr_n && st_wr));
+assign rom_wr = !wr_n;
 // the Gluk latch: /RSGLK (#FF37 D1) = 0 holds both flip-flops reset (page 0, Gluk Reset Service); after D1 = 1
 // the first sets on M1 in 0000-3FFF, gl on the next M1 from the RAM. Without BIOS: gl = 1 at reset (gl_init)
 always @(posedge clk) begin
@@ -318,6 +360,39 @@ always @(posedge clk) begin
 	end else if (m1_fetch) begin
 		if (a[15:14] == 2'b00) gl1 <= 1'b1;
 		else if (gl1) gl <= 1'b1;
+	end
+end
+
+// ---------------- Magic, #FB / #7B ----------------
+// Magic (DD124:3, DD143): at the next M1 from the RAM in 4000-FFFF: NMI (a short pulse), MCACHE (PRNROM = 1,
+// sticky; IN #7B ignored and TR-DOS forced while it lasts): the NMI handler 0066 comes from the cache (or the
+// printer ROM, page 3 of the BIOS ROM, when the cache is off). The core holds MCACHE for 2^20 clocks (37 ms).
+reg nmi_d = 1'b0, magic_arm = 1'b0;
+reg [8:0] nmi_cnt = 9'd0;
+reg [19:0] mc_cnt = 20'd0;
+wire nmi_p = nmi_cnt != 9'd0;
+// #FB / #7B read: A1 = 1, A2 = 0, A3 = A5 = A6 = 1; A7 = the new PRNROM
+wire p_fb = a[1] && !a[2] && a[3] && a[5] && a[6];
+reg iord_d = 1'b0;
+always @(posedge clk) begin
+	nmi_d <= nmi;
+	iord_d <= iord;
+	if (reset) begin
+		magic_arm <= 1'b0; nmi_cnt <= 9'd0; mc_cnt <= 20'd0; mcache <= 1'b0; prnrom <= 1'b0;
+	end else begin
+		if (nmi && !nmi_d) magic_arm <= 1'b1;
+		if (magic_arm && m1_fetch && a[15:14] != 2'b00) begin
+			magic_arm <= 1'b0;
+			nmi_cnt <= 9'd511;
+			mc_cnt <= 20'hFFFFF;
+			mcache <= 1'b1;
+			prnrom <= 1'b1;
+		end else begin
+			if (nmi_cnt != 9'd0) nmi_cnt <= nmi_cnt - 9'd1;
+			if (mc_cnt != 20'd0) mc_cnt <= mc_cnt - 20'd1;
+			else mcache <= 1'b0;
+			if (iord && !iord_d && p_fb && !mcache) prnrom <= a[7];
+		end
 	end
 end
 
