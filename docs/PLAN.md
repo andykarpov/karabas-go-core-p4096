@@ -121,7 +121,7 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ (2M×16), SDRAM 32 МБ
 
   Оценка ядра Mini G: 4,2k + своя машина (SRAM, страницы, порты, видео всех режимов, палитра, ловушка, многозадачность; ~2k) + обвязка платы (`kg_mcu2`, OSD, HDMI, звук; ~2,5-3k, как у tsconf) ≈ **9-9,5k LUT (60-63 %)**, ~40 RAMB16 из 52. Влезает вся машина вместе с GS. TS-FM (YM2203) — нет в доноре (у baseconf / tsconf FM заменён OPL4); если нужен — замер в Ф4.
 
-### Ф1 — Mini G, Pentagon-128 (ветка f1-minig)
+### Ф1 — Mini G, Pentagon-128 (ветка f1-minig) — ГОТОВО 2026-11-20 (игры с ленты не проверяли — решение пользователя)
 
 Верх платы на kg_* (`kg_mcu2`: OSD, USB-клавиатура, загрузка ROM из `.kg`), CPU, SRAM 4 МБ, ПЗУ в SDRAM (или BRAM на первое время), стандартное видео и бордюр, развёртка Pentagon, INT Pentagon / фирменный, турбо 3,5 / 7 / 14, #FE / #7FFD / #FF, AY, бипер, магнитофон, Kempston-джойстик, HDMI со звуком.
 Цель: BASIC 128 / 48, игры с ленты, тесты тайминга Pentagon (сверка с Unreal / Fuse).
@@ -135,8 +135,8 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ (2M×16), SDRAM 32 МБ
 - Схема HW.md: `SRA14` = gl и (`T_DOS` или `SPAGE0`) (без инверсии; проверено загрузкой).
 - Плата Mini G (сборка 26112001, 5 699 LUT / 37 %, 3 RAMB16, тайминг выполнен и в режиме ядра): меню 128 на HDMI, 128 BASIC с USB-клавиатуры, `BORDER 2` (красный бордюр), `PLAY "cdefgab"` — ноты AY в левом канале HDMI-звука; после сброса с CPU 14 МГц меню снова грузится (что пункт OSD применился, не подтверждено). Найдено: в тишине звук имел сдвиг −10240 — исправлено (тишина = 0), в следующей сборке.
 - Отзыв пользователя по OSD (2026-11-20): CPU, INT, Magic, Reset — ок; «INT X corr» и подписи значений пунктов не нравятся — обсудить; джойстиков два: Joystick L / Joystick R с вариантами profi / tsconf (Kempston, Sinclair1, Sinclair2, Cursor, QAOPM, QAOPS), по умолчанию L = Kempston, R = Sinclair1 (Sinclair и Cursor — через hid_parser JOY_TYPE, как в tsconf). Игры с ленты пока не проверяем.
-- Плата, сборка 26112002 (5 683 LUT, тайминг выполнен в обоих режимах): тишина звука = 0 (сдвиг исправлен); Turbo 14 через OSD — `BEEP 1,0` 720 Гц / 0,36 с против 262 Гц / 1,00 с на 3,5 МГц, то есть ×2,75, а не ×4: цикл BEEP в ПЗУ, а каждый байт ПЗУ из SDRAM ждёт WAIT (кэш ПЗУ в BRAM — если понадобится «No wait», вместе с WAITP Ф3); Kempston L: `IN 31` = 17 (вправо + огонь); джойстик R «Sinclair1» даёт клавиши 1-5 (вправо «2», огонь «5»): нумерация `hid_parser` / tsconf / profi, у Fuse и Interface 2 «Sinclair 1» = 6-0 — вопрос пользователю.
-- OSD Ф1 (решение пользователя 2026-11-20): Turbo (Off / 7 MHz / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T: XJ3 вошёл в пункт INT), Joystick L / R (Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS, по умолчанию Kempston / Sinclair1; через `hid_parser`, как tsconf), Magic (F11), Reset (F12) — кадр показать до мержа.
+- Плата, сборка 26112002 (5 683 LUT, тайминг выполнен в обоих режимах): тишина звука = 0 (сдвиг исправлен); Turbo 14 через OSD — `BEEP 1,0` 720 Гц / 0,36 с против 262 Гц / 1,00 с на 3,5 МГц, то есть ×2,75, а не ×4: цикл BEEP в ПЗУ, а каждый байт ПЗУ из SDRAM ждёт WAIT (кэш ПЗУ в BRAM — если понадобится «No wait», вместе с WAITP Ф3); Kempston L: `IN 31` = 17 (вправо + огонь); джойстик R «Sinclair1» даёт клавиши 1-5 (вправо «2», огонь «5»): нумерация `hid_parser` / tsconf / profi, у Fuse и Interface 2 «Sinclair 1» = 6-0 — пользователь: оставить как в tsconf / profi (одинаково во всех ядрах).
+- OSD Ф1 (решение пользователя 2026-11-20): Turbo (Off / 7 MHz / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T: XJ3 вошёл в пункт INT), Joystick L / R (Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS, по умолчанию Kempston / Sinclair1; через `hid_parser`, как tsconf), Magic (F11), Reset (F12) — кадр одобрен пользователем 2026-11-20 (сборка 26112002).
 
 ### Ф2 — видеорежимы и палитра (ветка f2-video)
 
