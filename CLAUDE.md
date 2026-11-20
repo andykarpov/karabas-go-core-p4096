@@ -8,7 +8,7 @@ A Pentagon-4096 core (`p4096`) for the Karabas Go, Mini and Mini G boards (Xilin
 
 User decisions (2026-11-19): the whole machine; all video modes and extended ports first; BIOS Setup settings in the OSD (the BIOS port registers stay, the OSD sets their reset values, an optional "Boot BIOS"); core id `p4096`. 2026-11-20: licence GPL v3, repo public on GitHub (andykarpov/karabas-go-core-p4096), output 768x608 checked by the user later on his monitor.
 
-Status: Ф0 done and merged (2026-11-19). Ф1 Pentagon-128 on Mini G done and merged (2026-11-20, build 26112002, Mini G hw ok). Ф2 video modes and palette done and merged (2026-11-20, build 26112003). Ф3 memory and BIOS ports done and merged (2026-11-20, build 26112009). Ф4 storage, sound, peripherals done and merged (2026-11-20, build 26112016). Ф5 OPL4 (MoonSound) done and merged (2026-11-20, build 26112019). Next: Ф6 Go / Mini and release, branch `f6-release`.
+Status: Ф0 done and merged (2026-11-19). Ф1 Pentagon-128 on Mini G done and merged (2026-11-20, build 26112002, Mini G hw ok). Ф2 video modes and palette done and merged (2026-11-20, build 26112003). Ф3 memory and BIOS ports done and merged (2026-11-20, build 26112009). Ф4 storage, sound, peripherals done and merged (2026-11-20, build 26112016). Ф5 OPL4 (MoonSound) done and merged (2026-11-20, build 26112019). Ф6 Go / Mini and release done (2026-11-20, build 26112020; Go / Mini never on a board). Backlog in PLAN.md (DivMMC, RS-232 / ESP via zifi, 768x608 check by the user).
 
 ## Simulation
 
