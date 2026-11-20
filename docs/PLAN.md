@@ -200,6 +200,9 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 
 ### Ф6 — Go / Mini и релиз (ветка f6-release)
 
+Решения пользователя (2026-11-20): лицензия GPL v3; репозиторий публичный на GitHub (andykarpov/karabas-go-core-p4096, создан, master запушен); вывод 768x608 пользователь проверит потом на своём мониторе.
+Сделано: топы Go и Mini делает `src/tools/mktop.py` из топа Mini G (порты — из топов core-baseconf), ucf / prj / xst для Go и Mini, Makefile на все платы, пункт VGA Sync (только Go), README / README.ru, LICENSE, исходники opl3_fpga (LGPL-3).
+
 Топы Go и Mini (VGA Go — синхро и развёртка), README / README.ru (авторство AleksandrDneprCity, лицензия по ответу автора), сборки всех плат, `cores.json` в karabas-go.
 Перед релизом (Ф6): Output 768x608 (подменю Video) на мониторе / ТВ пользователя; оставить пункт или убрать.
 
