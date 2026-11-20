@@ -73,6 +73,25 @@ def trap_program():
     return bytes(img)
 
 
+def static_program():
+    """HLOAD (#FC37 = 20): static RAM pages 0..3 at C000 (#7FFD D1 D0) get 2 bytes each (d*16+1, d*16+2) at FFFE;
+    then #FC37 = 00, #FF37 = 03, #FD37 = 0F (pages 0-3 of the ROM from the static RAM), #7FFD = 10 (BASIC 48 =
+    page 3): ld hl,(3FFE) -> 5B00 (page 5); #7FFD = 00 (Menu-128 = page 2): -> 5B02. Expect 3132 and 2122."""
+    p = [0xF3, 0x31, 0x00, 0xBE] + out(0xFC37, 0x20)
+    for d in range(4):
+        p += out(0x7FFD, d) + [0x21, d * 16 + 1, d * 16 + 2, 0x22, 0xFE, 0xFF]   # ld hl,..: ld (FFFE),hl
+    p += out(0xFC37, 0x00) + out(0xFF37, 0x03) + out(0xFD37, 0x0F)
+    p += out(0x7FFD, 0x10) + [0x2A, 0xFE, 0x3F, 0x22, 0x00, 0x5B]                # ld hl,(3FFE): ld (5B00),hl
+    p += out(0x7FFD, 0x00) + [0x2A, 0xFE, 0x3F, 0x22, 0x02, 0x5B]
+    p += [0xF3, 0x76]
+    # the code runs from the ROM page 2 until #FD37 maps page 2 to the static RAM: run it from the RAM (8000)
+    loader = [0xF3, 0x21, 0x00, 0x02, 0x11, 0x00, 0x80, 0x01, len(p), 0x00, 0xED, 0xB0, 0xC3, 0x00, 0x80]
+    img = bytearray(16384)
+    img[0:len(loader)] = bytes(loader)
+    img[0x200:0x200 + len(p)] = bytes(p)
+    return bytes(img)
+
+
 def main():
     outdir, tb = sys.argv[1], sys.argv[2]
     names = [int(x) for x in sys.argv[3:]] or sorted(SCHEMES)
@@ -118,6 +137,20 @@ def main():
         print('trap (OUT (#FD),A from the RAM, scheme 1): %s (page 1 %04x, 8 %04x, 9 %04x, 10 %04x)' %
               ('ok' if ok else 'WRONG', got[1], got[8], got[9], got[10]))
         fails += not ok
+    if not sys.argv[3:]:
+        romimg = open(os.path.join(src, 'glukpen.rom'), 'rb').read() + open(os.path.join(src, 'tr5_03.rom'), 'rb').read() + \
+            static_program() + open(os.path.join(src, 'basic48_128_std.rom'), 'rb').read()
+        romhex = os.path.join(outdir, 'mem_rom.hex')
+        with open(romhex, 'w') as f:
+            f.write('\n'.join('%02x' % b for b in romimg) + '\n')
+        for t in ('0', '1', '2'):
+            dump = os.path.join(outdir, 'mem_static.txt')
+            subprocess.run([tb, '+frames=1', '+rom=' + romhex, '+turbo=' + t, '+romlat=16', '+ramdump5b=' + dump], check=True,
+                           stdout=subprocess.DEVNULL)
+            v = [int(x, 16) for x in open(dump).read().split()]
+            ok = v == [0x31, 0x32, 0x21, 0x22]
+            print('static RAM (HLOAD write, #FD37 read) turbo %s: %s %s' % (t, 'ok' if ok else 'WRONG', v))
+            fails += not ok
     print('mem: %d failed' % fails)
     sys.exit(1 if fails else 0)
 

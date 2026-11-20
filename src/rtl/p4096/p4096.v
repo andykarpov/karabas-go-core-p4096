@@ -55,7 +55,8 @@ module p4096 (
 	// ROM
 	output wire        rom_req,
 	output wire [18:0] rom_addr,
-	output wire        rom_wr,        // a write (static RAM, cache, the flash copy), data cpu_do
+	output wire        rom_wr,        // a write (static RAM, cache, the flash copy)
+	output wire [7:0]  rom_din,       // its byte (from the write buffer of p4096_romcache)
 	input  wire [7:0]  rom_q,
 	input  wire        rom_done,
 
@@ -355,12 +356,12 @@ end
 wire [18:0] st_addr = {st_page, a[13:0]};
 wire st_req = rom_sel && !mreq_n && (!rd_n || (!wr_n && st_wr));
 // the byte cache of the storage (p4096_romcache.v): ROM reads without WAIT once cached
-wire st_done;
+wire st_done, st_wbusy;
 wire [7:0] st_q;
 p4096_romcache romcache (
 	.clk(clk), .reset(reset),
-	.req(st_req), .wr(!wr_n), .addr(st_addr), .din(cpu_do), .done(st_done), .q(st_q),
-	.s_req(rom_req), .s_wr(rom_wr), .s_addr(rom_addr), .s_din(), .s_done(rom_done), .s_q(rom_q)
+	.req(st_req), .wr(!wr_n), .addr(st_addr), .din(cpu_do), .done(st_done), .q(st_q), .wbusy(st_wbusy),
+	.s_req(rom_req), .s_wr(rom_wr), .s_addr(rom_addr), .s_din(rom_din), .s_done(rom_done), .s_q(rom_q)
 );
 // the Gluk latch: /RSGLK (#FF37 D1) = 0 holds both flip-flops reset (page 0, Gluk Reset Service); after D1 = 1
 // the first sets on M1 in 0000-3FFF, gl on the next M1 from the RAM. Without BIOS: gl = 1 at reset (gl_init)
@@ -469,7 +470,10 @@ end
 // cpu_q later; the CPU takes it at an edge after the one that samples WAIT
 wire ram_wait = cpu_ram_rd && !served;
 wire ram_wait_wr = cpu_ram_wr && !served && wb_full;   // a second write while the buffer is full
-assign wait_n = !(st_req && !st_done) && !ram_wait && !ram_wait_wr;
+// a write cycle to the storage window (MREQ without RD, not refresh: known from T1, before WAIT is sampled, /WR
+// comes later) waits while the write buffer of the cache is busy
+wire st_wait_wr = rom_sel && !mreq_n && rfsh_n && rd_n && st_wbusy && !st_done;
+assign wait_n = !(st_req && !st_done) && !st_wait_wr && !ram_wait && !ram_wait_wr;
 wire [7:0] ram_q = rd_cpu_q ? mem_q : cpu_q;
 
 // ---------------- INT ----------------

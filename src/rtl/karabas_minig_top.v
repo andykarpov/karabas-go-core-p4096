@@ -380,7 +380,7 @@ wire [1:0] hw_btn = mcu_btns[1:0];
 wire ld_rom_act = ld_active && ld_kind == 2'd0;
 wire ld_rom_wr = ld_wr && ld_kind == 2'd0;
 wire storage_busy, rom_req, rom_done, rom_wr;
-wire [7:0] cpu_dout;
+wire [7:0] cpu_dout, rom_din;
 wire [18:0] rom_addr;
 wire [7:0] rom_q;
 // the storage and its SDRAM controller: reset by the PLL lock and the reset keys (as core-baseconf)
@@ -388,7 +388,7 @@ reg [1:0] storage_key_rst = 2'b00;
 always @(posedge clk_sys) storage_key_rst <= {storage_key_rst[0], sw_reset | hw_btn[0]};
 baseconf_storage storage(
 	.clk(clk_sys), .reset(!locked || storage_key_rst[1]), .sdram_init_n(locked),
-	.rom_req(rom_req), .rom_wr(rom_wr), .rom_addr(rom_addr), .rom_din(cpu_dout), .rom_dout(rom_q), .rom_done(rom_done),
+	.rom_req(rom_req), .rom_wr(rom_wr), .rom_addr(rom_addr), .rom_din(rom_din), .rom_dout(rom_q), .rom_done(rom_done),
 	.gs_req(1'b0), .gs_wr(1'b0), .gs_addr(21'd0), .gs_din(8'd0), .gs_dout(), .gs_done(),
 	.loader_act(ld_rom_act), .loader_wr(ld_rom_wr), .loader_addr(ld_addr), .loader_data(ld_data),
 	.fl_wr(1'b0), .fl_a(32'd0), .fl_d(8'd0),
@@ -485,6 +485,7 @@ p4096 p4096 (
 	.rom_req			(rom_req),
 	.rom_addr		(rom_addr),
 	.rom_wr			(rom_wr),
+	.rom_din			(rom_din),
 	.rom_q			(rom_q),
 	.rom_done		(rom_done),
 	.dot_we			(dot_we),
