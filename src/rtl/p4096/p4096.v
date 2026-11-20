@@ -163,7 +163,9 @@ wire p_fffd = p_fd && a[15:13] == 3'b111;
 wire p_bffd = p_fd && a[15:13] == 3'b101;
 // #FE / #F6 write: A0 = 0, A2 = 1, A6 = 1; read #FE: A0 = 0
 wire p_fe_w = !a[0] && a[2] && a[6];
-wire p_fe_r = !a[0];
+// Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard (until Ф4: no drive, FF)
+wire p_ide = !a[1] && !a[2] && !dos;
+wire p_fe_r = !a[0] && !p_ide;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
 wire p_ff = a[7:0] == 8'hFF && !dos;
 // #xxF7 (DD90): A3 = 0, A2 = 1, A6 = 1; A14 A13 A12 = 110: #EFF7
