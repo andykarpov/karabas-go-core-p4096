@@ -28,6 +28,9 @@ module p4096 (
 	input  wire        int_firm,      // OSD: the value of #FE37 D7 (INT_SEL) at reset and when the OSD changes it
 	input  wire [6:0]  fe37_init,     // OSD: #FE37 D0-D6 at reset and when the OSD changes them (BIOS v4.2: 07)
 	input  wire        pal_en,        // OSD Palette: 0 = the standard 16 colours (XJ1-XJ3 of the TopBoard)
+	input  wire [7:0]  fc37_init,     // OSD: #FC37 at reset (memory scheme, D5 latch, multitasking, +3)
+	input  wire [7:0]  ff37_init,     // #FF37 at reset: without BIOS 03 (BIOS ROM off, Gluk latch free), as BIOS leaves it
+	input  wire        gl_init,       // the Gluk latch at reset: 1 = the normal ROM pages, 0 = Gluk Reset Service
 	input  wire        int_xj3,       // the XJ3 jumper: INT 2 T earlier
 	input  wire        nmi,           // Magic (1: NMI held)
 
@@ -129,6 +132,11 @@ reg [2:0] p7_page = 3'd0;      // 7FD0-2
 reg spage0 = 1'b0;             // #7FFD D4: ROM 48
 reg p7_d5 = 1'b0;              // 7FD5B
 reg p7_d6 = 1'b0, p7_d7 = 1'b0;
+reg p7_d5h = 1'b0;             // 7FD5 (DD77): D5 and not 7FD5_BLK, the memory bit
+reg [2:0] dfd = 3'd0;          // #DFFD D0-D2 (DD79)
+reg rr_1f = 1'b0, shrom = 1'b0, ra15m = 1'b0, fd1_4 = 1'b0, fd1_7 = 1'b0;   // #1FFD Scorpion / KAY (DD80)
+reg p3_dos = 1'b0, p3_d1 = 1'b0, p3_d2 = 1'b0;                              // #1FFD +3 (DD81)
+reg trap = 1'b0;               // the IN A,(n) / OUT (n),A trap (DD72, DD68:2)
 reg speaker = 1'b0;
 reg dos = 1'b0;                // T_DOS
 
@@ -138,6 +146,10 @@ wire iord = io && !rd_n;
 // #xxFD (DD71): A1 = 0, A2 = 1; A15 A14 A13 select
 wire p_fd = !a[1] && a[2];
 wire p_7ffd = p_fd && a[15:13] == 3'b011;
+// /P_7FFDS: in the trap #7FFD answers on any A15 = 0 (#1FFD / #3FFD / #5FFD too): the soft decode of 128K
+wire p_7ffds = p_7ffd || (trap && p_fd && !a[15]);
+wire p_dffd = p_fd && a[15:13] == 3'b110;
+wire p_1ffd = p_fd && a[15:13] == 3'b000;
 wire p_fffd = p_fd && a[15:13] == 3'b111;
 wire p_bffd = p_fd && a[15:13] == 3'b101;
 // #FE / #F6 write: A0 = 0, A2 = 1, A6 = 1; read #FE: A0 = 0
@@ -152,8 +164,17 @@ wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
 wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
 
-// RAM_48 = 7FD5B and 7FD5_BLK (#FC37 D4; Ф1: 1, the D5 latch of Pentagon-128)
-wire ram_48 = p7_d5;
+// #FC37: EM0 D0-D1, EM1 D2-D3, 7FD5_BLK D4, HLOAD D5, MTASK_ON D6, MODE_3+ D7
+wire [1:0] em0 = fc37[1:0], em1 = fc37[3:2];
+wire blk = fc37[4];
+wire mtask = fc37[6];
+wire mode3 = fc37[7];
+// RAM_48 = 7FD5B and 7FD5_BLK: D5 works as the 48K latch only with #FC37 D4 = 1
+wire ram_48 = p7_d5 && blk;
+wire rom_sp = ff37[0];
+// /WRHR: the hard decoded writes (#7FFD D5-D7, #DFFD, #1FFD) are off in the trap and while (RAM_48 or MTASK_ON)
+// with ROM_SP (docs/HW.md "Ловушка", чек полярности)
+wire wrhr = !trap && !((ram_48 || mtask) && rom_sp);
 
 reg iowr_d = 1'b0;
 wire iowr_s = iowr && !iowr_d;     // the first clock of the write
@@ -161,9 +182,11 @@ always @(posedge clk) iowr_d <= iowr;
 
 always @(posedge clk) begin
 	if (reset) begin
-		p7_page <= 3'd0; scr <= 1'b0; spage0 <= 1'b0; p7_d5 <= 1'b0; p7_d6 <= 1'b0; p7_d7 <= 1'b0;
+		p7_page <= 3'd0; scr <= 1'b0; spage0 <= 1'b0; p7_d5 <= 1'b0; p7_d6 <= 1'b0; p7_d7 <= 1'b0; p7_d5h <= 1'b0;
+		dfd <= 3'd0; rr_1f <= 1'b0; shrom <= 1'b0; ra15m <= 1'b0; fd1_4 <= 1'b0; fd1_7 <= 1'b0;
+		p3_dos <= 1'b0; p3_d1 <= 1'b0; p3_d2 <= 1'b0;
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
-		eff7 <= 8'd0; fc37 <= 8'd0; fd37 <= 8'd0; ff37 <= 8'd0;
+		eff7 <= 8'd0; fc37 <= fc37_init; fd37 <= 8'd0; ff37 <= ff37_init;
 		fe37 <= {int_firm, fe37_init};
 	end else if ({int_firm, fe37_init} != osd_fe37_d) begin
 		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
@@ -182,15 +205,26 @@ always @(posedge clk) begin
 			speaker <= cpu_do[4];
 			border_bri <= !a[3];
 		end
-		if (p_7ffd && !ram_48) begin
+		// DD75 (soft, P_7FFDS, blocked by RAM_48): D0-D5; DD77 (hard, P_7FFD and WRHR): D5-D7
+		if (p_7ffds && !ram_48) begin
 			p7_page <= cpu_do[2:0];
 			scr <= cpu_do[3];
 			spage0 <= cpu_do[4];
 			p7_d5 <= cpu_do[5];
 		end
-		if (p_7ffd) begin
+		if (p_7ffd && wrhr) begin
+			p7_d5h <= cpu_do[5] && !blk;
 			p7_d6 <= cpu_do[6];
 			p7_d7 <= cpu_do[7];
+		end
+		if (p_dffd && wrhr)
+			dfd <= cpu_do[2:0];
+		// #1FFD: Scorpion / KAY register outside +3, the +3 register (A12 = 1) in +3 mode (reset otherwise)
+		if (p_1ffd && wrhr && !mode3) begin
+			rr_1f <= cpu_do[0]; shrom <= cpu_do[1]; ra15m <= cpu_do[3]; fd1_4 <= cpu_do[4]; fd1_7 <= cpu_do[7];
+		end
+		if (p_1ffd && wrhr && mode3 && a[12]) begin
+			p3_dos <= cpu_do[0]; p3_d1 <= cpu_do[1]; p3_d2 <= cpu_do[2];
 		end
 	end
 end
@@ -217,15 +251,75 @@ always @(posedge clk) begin
 	end
 end
 
-// ---------------- memory map ----------------
-wire rom_sel = a[15:14] == 2'b00;
-// page bits 0..2: C000 -> #7FFD D0-D2, 8000 -> 2, 4000 -> 5 (Ф1: 128K, page bits 3..7 = 0)
-wire [2:0] ram_page = (a[15:14] == 2'b11) ? p7_page : {a[14], a[15], a[14]};
-wire [21:0] cpu_ma = {5'b00000, ram_page, a[13:0]};
-// ROM page {SRA15, SRA14} (gl = 1): 0 Gluk, 1 TR-DOS, 2 Menu-128, 3 BASIC 48
-wire [1:0] rom_page = {!dos, dos || spage0};   // SRA15 = not T_DOS, SRA14 = T_DOS or SPAGE0
-assign rom_addr = {3'b000, rom_page, a[13:0]};
+// ---------------- the IN / OUT trap ----------------
+// an opcode DB / D3 (11011x11) fetched from the RAM: the memory above 128 KB is off and #7FFD is soft decoded
+// until the next opcode from the RAM (README 6, DD72 / DD68:2 taken at the end of M1)
+reg [7:0] op_q = 8'h00;
+reg op_ram = 1'b0, m1_d = 1'b1;
+always @(posedge clk) begin
+	m1_d <= m1_n;
+	if (!m1_n && !mreq_n && !rd_n) begin
+		op_q <= cpu_di;
+		op_ram <= !rom_sel;
+	end
+	if (reset)
+		trap <= 1'b0;
+	else if (m1_n && !m1_d && op_ram)
+		trap <= (op_q & 8'hF7) == 8'hD3;
+end
+
+// ---------------- memory map (docs/HW.md "Страницы памяти") ----------------
+// RAM in 0000-3FFF: #EFF7 D3 or #1FFD D0 (Scorpion), or the +3 special mode
+wire romram = eff7[3] || rr_1f;
+wire special = mode3 && p3_dos;
+wire rom_sel = (a[15:14] == 2'b00) && !romram && !special;
+// page bits 0..2 (DD82 / DD83)
+wire [2:0] pg_lo = special ? (p3_d2 ? {!(a[14] && a[15]), a[15] || (a[14] && p3_d1), a[14]} : {p3_d1, a[15], a[14]}) :
+                   (a[15:14] == 2'b11) ? p7_page : {a[14], a[15], a[14]};
+// page bits 3..7 (DD84-DD86) by EM0 / EM1, in the window C000 (HRAM: every window in multitasking, ош. 9)
+reg mem256, mem512, mem1m, mem2m, mem4m;
+always @(*) begin
+	case (em0)
+		2'd0: begin mem256 = 1'b0;  mem512 = 1'b0;  end
+		2'd1: begin mem256 = p7_d6; mem512 = p7_d7; end
+		2'd2: begin mem256 = dfd[0]; mem512 = dfd[1]; end
+		2'd3: begin mem256 = fd1_4; mem512 = fd1_7; end
+	endcase
+	case ({em1[0], em0})
+		3'd1: mem1m = p7_d5h;
+		3'd2, 3'd6: mem1m = dfd[2];
+		3'd7: mem1m = p7_d7;
+		default: mem1m = 1'b0;
+	endcase
+	case (em1)
+		2'd0: begin mem2m = 1'b0;  mem4m = 1'b0;  end
+		2'd1: begin mem2m = p7_d6; mem4m = p7_d5h; end
+		2'd2: begin mem2m = p7_d6; mem4m = p7_d7; end
+		2'd3: begin mem2m = fd1_4; mem4m = fd1_7; end
+	endcase
+end
+wire hram = (a[15:14] == 2'b11) || mtask;
+wire [4:0] pg_hi = (hram && !trap) ? {mem4m, mem2m, mem1m, mem512, mem256} : 5'd0;
+wire [21:0] cpu_ma = {pg_hi, pg_lo, a[13:0]};
+// ROM page (DD52 / DD56): {MODE_3+, SRA15, SRA14}; gl = the Gluk latch (DD49)
+reg gl1 = 1'b0, gl = 1'b1;
+wire [1:0] rom_lo = mode3 ? {p3_d2, spage0} :
+                    (shrom || !gl) ? 2'b00 : {!dos ^ ra15m, dos || spage0};
+wire [2:0] rom_page = {mode3, rom_lo};
+assign rom_addr = {2'b00, rom_page, a[13:0]};
 assign rom_req = rom_sel && !mreq_n && !rd_n;
+// the Gluk latch: /RSGLK (#FF37 D1) = 0 holds both flip-flops reset (page 0, Gluk Reset Service); after D1 = 1
+// the first sets on M1 in 0000-3FFF, gl on the next M1 from the RAM. Without BIOS: gl = 1 at reset (gl_init)
+always @(posedge clk) begin
+	if (reset) begin
+		gl1 <= 1'b0; gl <= gl_init;
+	end else if (!ff37[1]) begin
+		gl1 <= 1'b0; gl <= 1'b0;
+	end else if (m1_fetch) begin
+		if (a[15:14] == 2'b00) gl1 <= 1'b1;
+		else if (gl1) gl <= 1'b1;
+	end
+end
 
 // ---------------- the RAM arbiter ----------------
 wire cpu_ram = !mreq_n && rfsh_n && !rom_sel;

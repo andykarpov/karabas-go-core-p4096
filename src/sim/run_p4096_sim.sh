@@ -3,6 +3,7 @@
 #   video  the CPU in reset, random screen 5 in the RAM: frame 1 against src/tools/p4096_vmodel.py (seconds)
 #   boot   the ROM set of core.json, the 128 menu: PNG of the last frame (frames, default 60)
 #   modes  Ф2: all video modes, the palette, FlashColor, GigaScreen against p4096_vmodel.py (p4096_modes.py)
+#   mem    Ф3: the memory schemes 0-6 of #FC37 against the table of docs/HW.md (p4096_mem.py)
 #   int    INT against the raster: int_test.asm here and in unreal-ng PENTAGON (emu-shot), the border stripes
 #          must be at the same points (TB_ARGS="+firm" etc. for the other settings, no reference then)
 # Output in src/sim/build/p4096. Verilator, not iverilog: z80-silicon has registers without an initial value
@@ -59,6 +60,10 @@ modes)
 	# Ф2: every video mode against the model (p4096_modes.py; a case name as the second argument: only it)
 	shift; python3 -I "$SIM/p4096_modes.py" "$OUT" "$OUT/obj/tb" "$@"
 	;;
+mem)
+	# Ф3: the memory schemes 0-6 of #FC37 (p4096_mem.py; scheme numbers as arguments: only them)
+	shift; python3 -I "$SIM/p4096_mem.py" "$OUT" "$OUT/obj/tb" "$@"
+	;;
 *)
-	echo "usage: $0 [video|boot|int|modes] [frames | case]"; exit 2 ;;
+	echo "usage: $0 [video|boot|int|modes|mem] [frames | case]"; exit 2 ;;
 esac

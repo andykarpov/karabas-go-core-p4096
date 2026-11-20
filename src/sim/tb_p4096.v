@@ -4,7 +4,7 @@
  ROM_LAT clocks after the request, as baseconf_storage in the SDRAM) and the frame of the dots dumped as text.
 
  Plusargs:
-   +rom=FILE    the ROM, hex bytes (64 KB)          +ram=FILE  the RAM at start, hex bytes (128 KB)
+   +rom=FILE    the ROM, hex bytes (64 KB)          +ram=FILE  the RAM at start, hex bytes (from 0)
    +hold        the CPU stays in reset (the video of the RAM as loaded)
    +frames=N    run N frames (from the top line of the window, v = 256)
    +dump=FILE   the last frame: 304 lines of 768 dots (12-bit RGB hex), the window of p4096_scandbl
@@ -16,10 +16,11 @@ module tb_p4096;
 reg clk = 1'b0;
 always #17.84 clk = ~clk;
 
-reg [7:0] ram [0:131071];
+reg [7:0] ram [0:4194303];   // 4 MB (the SRAM of the board)
 reg [7:0] rom [0:65535];
 integer i, frames, nframe, fd, fl, rom_lat;
-reg hold, firm, xj3;
+reg hold, firm, xj3, gl;
+reg [7:0] fc37;
 reg [1:0] turbo;
 reg [8*256-1:0] fname;
 
@@ -42,7 +43,7 @@ reg reset = 1'b1;
 
 p4096 dut (
 	.clk(clk), .reset(reset),
-	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1),
+	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(8'h03), .gl_init(gl),
 	.kbd_a(kbd_a), .kbd_d(5'b11111), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_q(rom_q), .rom_done(rom_done),
@@ -53,8 +54,8 @@ p4096 dut (
 
 // RAM: the byte of a read in the next clock (the input register of the top); a write in its first clock
 always @(posedge clk) begin
-	if (mem_rd) mem_q <= ram[mem_a[16:0]];
-	if (mem_wr) ram[mem_a[16:0]] <= mem_d;
+	if (mem_rd) mem_q <= ram[mem_a];
+	if (mem_wr) ram[mem_a] <= mem_d;
 end
 
 // ROM: rom_done rom_lat clocks after rom_req with the same address
@@ -118,12 +119,14 @@ initial begin
 	fl = 0;
 	if (!$value$plusargs("frames=%d", frames)) frames = 2;
 	if (!$value$plusargs("trace=%d", trace_n)) trace_n = 0;
+	if (!$value$plusargs("fc37=%h", fc37)) fc37 = 8'h1A;      // BIOS v4.2: scheme 5 (Profi + Pentagon), D5 latch
+	gl = !$test$plusargs("gluk");
 	if (!$value$plusargs("romlat=%d", rom_lat)) rom_lat = 6;
 	if (!$value$plusargs("turbo=%d", turbo)) turbo = 2'd0;
 	hold = $test$plusargs("hold");
 	firm = $test$plusargs("firm");
 	xj3 = $test$plusargs("xj3");
-	for (i = 0; i < 131072; i = i + 1) ram[i] = 8'h00;
+	for (i = 0; i < 4194304; i = i + 1) ram[i] = 8'h00;
 	for (i = 0; i < 65536; i = i + 1) rom[i] = 8'hFF;
 	if ($value$plusargs("rom=%s", fname)) $readmemh(fname, rom);
 	if ($value$plusargs("ram=%s", fname)) $readmemh(fname, ram);
@@ -134,6 +137,11 @@ initial begin
 	if ($value$plusargs("dump=%s", fname)) begin
 		fd = $fopen(fname, "w");
 		for (i = 0; i < 304 * 768; i = i + 1) $fwrite(fd, "%05x\n", frame_buf[i]);
+		$fclose(fd);
+	end
+	if ($value$plusargs("pagedump=%s", fname)) begin   // the first 2 bytes of each 16 KB page
+		fd = $fopen(fname, "w");
+		for (i = 0; i < 256; i = i + 1) $fwrite(fd, "%02x%02x\n", ram[i * 16384], ram[i * 16384 + 1]);
 		$fclose(fd);
 	end
 	if (fl != 0) $fclose(fl);
