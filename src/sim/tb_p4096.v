@@ -42,9 +42,9 @@ reg reset = 1'b1;
 
 p4096 dut (
 	.clk(clk), .reset(reset),
-	.turbo(turbo), .int_firm(firm), .int_xj3(xj3),
+	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0),
 	.kbd_a(kbd_a), .kbd_d(5'b11111), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
-	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_q(mem_q),
+	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_q(rom_q), .rom_done(rom_done),
 	.dot_we(dot_we), .dot_x(dot_x), .dot_line(dot_line), .dot_rgb(dot_rgb), .line_start(line_start),
 	.audio_l(audio_l), .audio_r(audio_r),

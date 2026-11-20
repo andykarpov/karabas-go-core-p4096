@@ -27,6 +27,7 @@ module p4096 (
 	input  wire [1:0]  turbo,         // 0 3.5, 1 7, 2 14 MHz
 	input  wire        int_firm,      // 0 Pentagon, 1 Firm (+16 lines, +48 T)
 	input  wire        int_xj3,       // the XJ3 jumper: INT 2 T earlier
+	input  wire        nmi,           // Magic (1: NMI held)
 
 	// keyboard (hid_parser: A15..A8 in, the columns out, active low), Kempston (active high: F U D L R)
 	output wire [7:0]  kbd_a,
@@ -40,6 +41,7 @@ module p4096 (
 	output reg         mem_rd = 1'b0,
 	output reg         mem_wr = 1'b0,
 	output reg  [7:0]  mem_d = 8'd0,
+	output reg         mem_oe_n = 1'b0,   // 1 in both clocks of a write: SRAM /OE high, the FPGA drives the data
 	input  wire [7:0]  mem_q,
 
 	// ROM
@@ -108,7 +110,7 @@ assign int_n_o = int_n;
 
 z80s_t80pa cpu (
 	.RESET_n(!reset), .CLK(clk), .CEN_p(zpos), .CEN_n(zneg),
-	.WAIT_n(wait_n), .INT_n(int_n), .NMI_n(1'b1), .BUSRQ_n(1'b1),
+	.WAIT_n(wait_n), .INT_n(int_n), .NMI_n(!nmi), .BUSRQ_n(1'b1),
 	.M1_n(m1_n), .MREQ_n(mreq_n), .IORQ_n(iorq_n), .RD_n(rd_n), .WR_n(wr_n), .RFSH_n(rfsh_n),
 	.HALT_n(), .BUSAK_n(),
 	.A(a), .DI(cpu_di), .DO(cpu_do)
@@ -215,6 +217,7 @@ always @(posedge clk) begin
 	mem_wr <= 1'b0;
 	rd_cpu <= 1'b0;
 	wr_hold <= mem_wr;
+	mem_oe_n <= mem_wr;     // the hold clock of a write (the first one is set below)
 	rd_cpu_q <= rd_cpu;
 	if (rd_cpu_q) cpu_q <= mem_q;
 	if (mreq_n) served <= 1'b0;
@@ -225,6 +228,7 @@ always @(posedge clk) begin
 		mem_a <= wb_a;
 		mem_d <= wb_d;
 		mem_wr <= 1'b1;
+		mem_oe_n <= 1'b1;
 		wb_full <= 1'b0;
 	end else if (rd_issue) begin
 		mem_a <= cpu_ma;
