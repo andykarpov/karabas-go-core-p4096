@@ -1,9 +1,11 @@
 # Pentagon-4096 core (p4096) for Karabas Go / Mini / Mini G, ISE 14.7.
 #
-#   make minig            one board: synthesis, implementation, bitstream, p4096.kg (Mini G only until Ф5)
+#   make go|mini|minig    one board: synthesis, implementation, bitstream, p4096.kg (the boards share xst/ and _ngo/:
+#                         one after the other); rtl/karabas_{go,mini}_top.v come from tools/mktop.py
 #   make minig-xst        one step: <board>-xst (.ngc), <board>-impl (.bin), <board>-core (.kg)
 #   make minig-report     LUTs, slices, block RAMs and the timing result of the last build (and of -coremode)
-#   make minig-coremode   the timing of the last build in the mode of the core of HDMI (pcf_core.py, as core-zxuno)
+#   make minig-coremode   the timing of the last build in the mode of the core of HDMI (pcf_core.py, as core-zxuno;
+#                         mini-coremode too)
 #   make sim-video        Verilator: the standard screen against tools/p4096_vmodel.py (seconds)
 #   make sim-int          Verilator + unreal-ng: INT against the raster (int_test.asm, about half a minute)
 #   make sim-boot         Verilator: the 128 menu boots (60 frames, about 40 s)
@@ -24,16 +26,18 @@ XIL = source $(ISE_SETTINGS) > /dev/null;
 prj_src = $(shell sed -n 's/^[a-z]* work "\(.*\)"/\1/p' $(1) 2>/dev/null)
 
 PART = xc6slx25-ftg256-2
-BOARDS = minig
+BOARDS = go mini minig
 KG = p4096.kg
 JSON = core.json
 # map / par as core-zxuno; cost table 2 first (karabas-go-notes map-cost-table-2-first)
+MAP_T_go = 2
+MAP_T_mini = 2
 MAP_T_minig = 2
 MAP_OPT = -logic_opt off -ol high -xe n -xt 0 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc off -power off
 PAR_OPT = -ol high -xe n -mt 4
 INCLUDES = $(wildcard ../modules/rtl/mcu/*.vh)
 
-.PHONY: measure-all measure-report clean sim-video sim-int sim-boot sim-modes $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report) minig-coremode
+.PHONY: measure-all measure-report clean sim-video sim-int sim-boot sim-modes $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report) mini-coremode minig-coremode
 
 define board
 SRC_$(1) := $$(shell sed -n 's/^[a-z]* work "\(.*\)"/\1/p' karabas_$(1).prj)
@@ -65,13 +69,16 @@ $(1)-report:
 endef
 $(foreach b,$(BOARDS),$(eval $(call board,$(b))))
 
-minig-coremode: karabas_minig_core.twr
-karabas_minig_core.twr: karabas_minig.bin pcf_core.py
-	python3 pcf_core.py karabas_minig.pcf karabas_minig_core.pcf
-	$(XIL) trce -intstyle ise -v 3 -s 2 -n 3 -fastpaths karabas_minig.ncd -o karabas_minig_core.twr karabas_minig_core.pcf \
-		| tee karabas_minig_core.log | grep -E "ERROR|WARNING" || true
-	@! grep -q "No timing constraints found" karabas_minig_core.twr || { echo "trce did not read karabas_minig_core.pcf"; \
-		rm -f karabas_minig_core.twr; exit 1; }
+define core_mode
+$(1)-coremode: karabas_$(1)_core.twr
+karabas_$(1)_core.twr: karabas_$(1).bin pcf_core.py
+	python3 pcf_core.py karabas_$(1).pcf karabas_$(1)_core.pcf
+	$(XIL) trce -intstyle ise -v 3 -s 2 -n 3 -fastpaths karabas_$(1).ncd -o karabas_$(1)_core.twr karabas_$(1)_core.pcf \
+		| tee karabas_$(1)_core.log | grep -E "ERROR|WARNING" || true
+	@! grep -q "No timing constraints found" karabas_$(1)_core.twr || { echo "trce did not read karabas_$(1)_core.pcf"; \
+		rm -f karabas_$(1)_core.twr; exit 1; }
+endef
+$(foreach b,mini minig,$(eval $(call core_mode,$(b))))
 
 sim-video:
 	sim/run_p4096_sim.sh video
