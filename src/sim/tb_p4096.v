@@ -17,7 +17,7 @@ reg clk = 1'b0;
 always #17.84 clk = ~clk;
 
 reg [7:0] ram [0:4194303];   // 4 MB (the SRAM of the board)
-reg [7:0] rom [0:65535];
+reg [7:0] rom [0:524287];   // 512 KB: the space of baseconf_storage (main ROM 0..127 KB, ...)
 integer i, frames, nframe, fd, fl, rom_lat;
 reg hold, firm, xj3, gl;
 reg [7:0] fc37;
@@ -72,7 +72,7 @@ always @(posedge clk) begin
 	end else if (rom_cnt < rom_lat)
 		rom_cnt <= rom_cnt + 1;
 	else begin
-		rom_q <= rom[rom_addr[15:0]];
+		rom_q <= rom[rom_addr];
 		rom_done <= 1'b1;
 	end
 end
@@ -127,7 +127,7 @@ initial begin
 	firm = $test$plusargs("firm");
 	xj3 = $test$plusargs("xj3");
 	for (i = 0; i < 4194304; i = i + 1) ram[i] = 8'h00;
-	for (i = 0; i < 65536; i = i + 1) rom[i] = 8'hFF;
+	for (i = 0; i < 524288; i = i + 1) rom[i] = 8'hFF;
 	if ($value$plusargs("rom=%s", fname)) $readmemh(fname, rom);
 	if ($value$plusargs("ram=%s", fname)) $readmemh(fname, ram);
 	if ($value$plusargs("log=%s", fname)) fl = $fopen(fname, "w");

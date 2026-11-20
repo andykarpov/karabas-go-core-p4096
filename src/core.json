@@ -21,6 +21,10 @@
         {
             "filename": "roms/basic48_128_std.rom",
             "address": 49152
+        },
+        {
+            "filename": "roms/plus341.rom",
+            "address": 65536
         }
     ],
     "boards": {
