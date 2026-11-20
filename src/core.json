@@ -120,6 +120,11 @@
             "open": 3
         },
         {
+            "type": "M",
+            "name": "Disks",
+            "open": 4
+        },
+        {
             "type": "-"
         },
         {
@@ -312,6 +317,35 @@
             ],
             "default": 0,
             "page": 3
+        },
+        {
+            "type": "S",
+            "name": "HDD Master",
+            "index": 21,
+            "options": [
+                "CF card",
+                "Image"
+            ],
+            "default": 0,
+            "page": 4
+        },
+        {
+            "type": "F",
+            "name": "HDF0",
+            "slot": 4,
+            "extensions": ".hdf .img .vhd",
+            "page": 4,
+            "enable_if": {
+                "item": "HDD Master",
+                "value": "Image"
+            }
+        },
+        {
+            "type": "F",
+            "name": "HDF1",
+            "slot": 5,
+            "extensions": ".hdf .img .vhd",
+            "page": 4
         }
     ],
     "rtc_mode": 0

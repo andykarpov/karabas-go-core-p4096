@@ -124,12 +124,6 @@ assign FLASH_SCK    = 1'b0;
 assign FLASH_WP_N   = 1'b1;
 assign FLASH_HOLD_N = 1'b1;
 
-assign WA = 3'b000;
-assign WCS_N = 2'b11;
-assign WRD_N = 1'b1;
-assign WWR_N = 1'b1;
-assign WRESET_N = 1'b1;
-assign WD = 16'hZZZZ;
 
 assign ESP32_SPI_CS_N = 1'b1;
 assign UART_RX = 1'bz;
@@ -183,6 +177,13 @@ IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
 BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 
 wire [55:0] mcu_kbd;
+// the image files of the mcu (kg_mcu2 ENABLE_IMG, img_sdc inside): HDF0 slot 4, HDF1 slot 5 (hdf_ata)
+wire [7:0] sdc_img_mounted, sdc_rd, sdc_wr, sdc_byte_in_data, sdc_byte_out_data;
+wire [63:0] sdc_img_size;
+wire [31:0] sdc_sector;
+wire sdc_busy, sdc_done, sdc_error, sdc_byte_in_strobe;
+wire [2:0] sdc_slot;
+wire [8:0] sdc_byte_addr;
 wire [7:0] ms_x, ms_y, mcu_ms_z, mcu_ms_b;
 wire mcu_ms_wr;
 wire [7:0] rtc_a, rtc_di, rtc_do;
@@ -205,7 +206,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 21;
+localparam SW_N = 22;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -214,7 +215,8 @@ kg_mcu2 #(
 	.SW_N(SW_N),
 	.CS_FILTER(3),
 	.ENABLE_OSD(1),
-	.ENABLE_IMG(0),
+	.ENABLE_IMG(1),
+	.IMG_OUT_LATENCY(3),
 	.ENABLE_PORTS(4'b0000),
 	.ENABLE_RTC(1),
 	.RTC_SKIP_0D(1),               // MC146818 (core.json rtc_mode 0): C / D are flags
@@ -287,19 +289,19 @@ kg_mcu2 #(
 	.OSD_PH			(osd_ph),
 	.OSD_PLACE		(osd_place),
 	.OSD_ZOOM		(osd_zoom),
-	.SDC_IMG_MOUNTED(),
-	.SDC_IMG_SIZE	(),
-	.SDC_RD			(8'd0),
-	.SDC_WR			(8'd0),
-	.SDC_SECTOR		(32'd0),
-	.SDC_BUSY		(),
-	.SDC_DONE		(),
-	.SDC_ERROR		(),
-	.SDC_SLOT		(),
-	.SDC_BYTE_IN_STROBE(),
-	.SDC_BYTE_ADDR	(),
-	.SDC_BYTE_IN_DATA(),
-	.SDC_BYTE_OUT_DATA(8'd0),
+	.SDC_IMG_MOUNTED(sdc_img_mounted),
+	.SDC_IMG_SIZE	(sdc_img_size),
+	.SDC_RD			(sdc_rd),
+	.SDC_WR			(sdc_wr),
+	.SDC_SECTOR		(sdc_sector),
+	.SDC_BUSY		(sdc_busy),
+	.SDC_DONE		(sdc_done),
+	.SDC_ERROR		(sdc_error),
+	.SDC_SLOT		(sdc_slot),
+	.SDC_BYTE_IN_STROBE(sdc_byte_in_strobe),
+	.SDC_BYTE_ADDR	(sdc_byte_addr),
+	.SDC_BYTE_IN_DATA(sdc_byte_in_data),
+	.SDC_BYTE_OUT_DATA(sdc_byte_out_data),
 	.IMG_WP			(),
 	.IMG_PHYS_WR	(),
 	.IMG_PHYS		(),
@@ -372,6 +374,7 @@ wire [1:0] sw_reset_to = softsw[17*8 +: 2];   // Reset to (Direct): Gluk / Menu-
 wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No wait
 wire sw_mouse_off = softsw[19*8];        // 19 Mouse On / Off (Kempston mouse)
 wire sw_sd_off = softsw[20*8];           // 20 SoundDrive On / Off
+wire sw_hdd_image = softsw[21*8];        // 21 HDD Master: CF card / Image (HDF0); HDF1 = Slave (image)
 reg [3:0] em;
 always @(*)
 	case (sw_mem)
@@ -507,6 +510,12 @@ p4096 p4096 (
 	.ms_z				(cursor_z),
 	.ms_b				(cursor_b),
 	.sd_en			(!sw_sd_off),
+	.ide_a			(ide_a),
+	.ide_cs_n		(ide_cs_n),
+	.ide_rd_n		(ide_rd_n),
+	.ide_wr_n		(ide_wr_n),
+	.ide_dout		(ide_dout),
+	.ide_din			(ide_din),
 	.rtc_a			(rtc_a),
 	.rtc_di			(rtc_di),
 	.rtc_wr			(rtc_wr),
@@ -537,6 +546,39 @@ p4096 p4096 (
 	.int_n_o			()
 );
 assign TAPE_OUT = tape_out;
+
+// ---------- Nemo IDE: the CF card of the board and hdf_ata (images on SD1) ----------
+// As core-baseconf (ide_mux of the Profi core): the card is device 0 with HDD Master = CF card and gets the
+// strobes then; the read data come from the card when it is device 0 and selected, else from hdf_ata (device 0
+// with HDD Master = Image, device 1 always).
+wire [2:0] ide_a;
+wire [1:0] ide_cs_n;
+wire ide_rd_n, ide_wr_n;
+wire [15:0] ide_dout, ide_din, hdf_dout;
+wire hdf_dev, hdf_dev1_here, hdf_led;
+wire [1:0] hdf_rd, hdf_wr;
+wire [31:0] hdf_sector;
+wire [7:0] hdf_out_data;
+wire hdf_own = sdc_slot[2:1] == 2'b10;
+wire cf_sel = !sw_hdd_image;
+assign WA = ide_a;
+assign WCS_N = ide_cs_n | {2{!cf_sel}};
+assign WRD_N = ide_rd_n || !cf_sel;
+assign WWR_N = ide_wr_n || !cf_sel;
+assign WRESET_N = !machine_reset;
+assign WD = (!ide_wr_n && cf_sel) ? ide_dout : 16'hZZZZ;
+assign ide_din = (cf_sel && !hdf_dev) ? WD : hdf_dout;
+assign sdc_rd = {2'b00, hdf_rd, 4'b0000};
+assign sdc_wr = {2'b00, hdf_wr, 4'b0000};
+assign sdc_sector = hdf_sector;
+assign sdc_byte_out_data = hdf_out_data;
+hdf_ata #(.ENABLE_RDB(0)) hdf_ata(.clk(clk_bus), .reset(areset), .ata_reset(machine_reset), .dev0_en(sw_hdd_image),
+	.dev(hdf_dev), .dev1_here(hdf_dev1_here), .a(ide_a), .cs_n(ide_cs_n), .rd_n(ide_rd_n), .wr_n(ide_wr_n),
+	.din(ide_dout), .dout(hdf_dout), .img_mounted(sdc_img_mounted[5:4]), .img_size(sdc_img_size),
+	.sdc_rd(hdf_rd), .sdc_wr(hdf_wr), .sdc_sector(hdf_sector), .sdc_busy(sdc_busy && hdf_own),
+	.sdc_done(sdc_done && hdf_own), .sdc_error(sdc_error), .sdc_byte_in_strobe(sdc_byte_in_strobe && hdf_own),
+	.sdc_byte_addr(sdc_byte_addr), .sdc_byte_in_data(sdc_byte_in_data), .sdc_byte_out_data(hdf_out_data),
+	.led(hdf_led));
 
 // ---------- SRAM ----------
 assign MA = mem_a[21:1];

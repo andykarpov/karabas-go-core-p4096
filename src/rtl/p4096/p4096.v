@@ -52,6 +52,13 @@ module p4096 (
 	input  wire        sd_en,
 	// CMOS (Gluk: #DFF7 address, #BFF7 data, open with #EFF7 D7): the clock registers of kg_mcu2 (RTC_A -> RTC_DO a
 	// clock later; a write is RTC_CS and !RTC_WR_N for one clock)
+	// Nemo IDE (A1 = A2 = 0, not TR-DOS): the IDE bus (the top puts the CF card and hdf_ata on it)
+	output wire [2:0]  ide_a,
+	output wire [1:0]  ide_cs_n,
+	output wire        ide_rd_n,
+	output wire        ide_wr_n,
+	output wire [15:0] ide_dout,
+	input  wire [15:0] ide_din,
 	output reg  [7:0]  rtc_a = 8'd0,
 	output wire [7:0]  rtc_di,
 	output wire        rtc_wr,
@@ -178,7 +185,7 @@ wire p_fffd = p_fd && a[15:13] == 3'b111;
 wire p_bffd = p_fd && a[15:13] == 3'b101;
 // #FE / #F6 write: A0 = 0, A2 = 1, A6 = 1; read #FE: A0 = 0
 wire p_fe_w = !a[0] && a[2] && a[6];
-// Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard (until Ф4: no drive, FF)
+// Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard
 wire p_ide = !a[1] && !a[2] && !dos;
 wire p_fe_r = !a[0] && !p_ide;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
@@ -274,6 +281,20 @@ always @(posedge clk) begin
 			p3_dos <= cpu_do[0]; p3_d1 <= cpu_do[1]; p3_d2 <= cpu_do[2];
 		end
 	end
+end
+
+// Nemo IDE (DD153-DD157): A0 = 0 a register of the drive (A7..A5 = its number, /CS0 = A3, /CS1 = A4); A0 = 1
+// (#11) the high byte of the data register: written before a word write, latched by a word read
+reg [7:0] ide_hi = 8'hFF;
+wire ide_reg = io && p_ide && !a[0];
+assign ide_a = a[7:5];
+assign ide_cs_n = ide_reg ? {a[4], a[3]} : 2'b11;
+assign ide_rd_n = !(ide_reg && !rd_n);
+assign ide_wr_n = !(ide_reg && !wr_n);
+assign ide_dout = {ide_hi, cpu_do};
+always @(posedge clk) begin
+	if (iowr_s && p_ide && a[0]) ide_hi <= cpu_do;
+	else if (!ide_rd_n) ide_hi <= ide_din[15:8];     // the last clock of the strobe stays
 end
 
 assign rtc_di = cpu_do;
@@ -563,6 +584,8 @@ always @(*) begin
 			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
+		else if (p_ide)
+			cpu_di = a[0] ? ide_hi : ide_din[7:0];
 		else if (p_rtcd)
 			cpu_di = rtc_do;
 		else if (p_mouse)
