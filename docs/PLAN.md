@@ -121,10 +121,22 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ (2M×16), SDRAM 32 МБ
 
   Оценка ядра Mini G: 4,2k + своя машина (SRAM, страницы, порты, видео всех режимов, палитра, ловушка, многозадачность; ~2k) + обвязка платы (`kg_mcu2`, OSD, HDMI, звук; ~2,5-3k, как у tsconf) ≈ **9-9,5k LUT (60-63 %)**, ~40 RAMB16 из 52. Влезает вся машина вместе с GS. TS-FM (YM2203) — нет в доноре (у baseconf / tsconf FM заменён OPL4); если нужен — замер в Ф4.
 
-### Ф1 — Mini G, Pentagon-128 (ветка f1-minig)
+### Ф1 — Mini G, Pentagon-128 (ветка f1-minig) — ГОТОВО 2026-11-20 (игры с ленты не проверяли — решение пользователя)
 
 Верх платы на kg_* (`kg_mcu2`: OSD, USB-клавиатура, загрузка ROM из `.kg`), CPU, SRAM 4 МБ, ПЗУ в SDRAM (или BRAM на первое время), стандартное видео и бордюр, развёртка Pentagon, INT Pentagon / фирменный, турбо 3,5 / 7 / 14, #FE / #7FFD / #FF, AY, бипер, магнитофон, Kempston-джойстик, HDMI со звуком.
 Цель: BASIC 128 / 48, игры с ленты, тесты тайминга Pentagon (сверка с Unreal / Fuse).
+
+Сделано (2026-11-20, ветка f1-minig):
+- Машина `rtl/p4096/p4096.v` без привязки к плате: z80-silicon на clk_bus 28 МГц с разрешениями 3,5 / 7 / 14 (такт 3,5 = 2 точки растра), #FE / #F6 (яркость бордюра адресом), #7FFD (защёлка D5, чтение #7FFD), #xxFF (последний атрибут, FF на бордюре и в TR-DOS), Kempston #1F, AY / TurboSound, переключение ПЗУ TR-DOS (3Dxx при ПЗУ 48, выход по M1 из ОЗУ), NMI (Magic).
+- ОЗУ — SRAM: чтение за 1 такт 28 МГц, запись за 2 (/WE через ODDR2 на полтакта позже адреса), видео — слоты c5 % 8 = 0 (4 на знакоместо, Ф1 берёт 2), запись CPU через буфер на одно слово; в турбо 14 чтение ждёт WAIT, только если попало на слот видео.
+- ПЗУ (4 страницы, `core.json` с адреса 0) — в SDRAM через `baseconf_storage` (как baseconf), CPU ждёт байт по WAIT (на 3,5 МГц ожиданий нет).
+- Видео `p4096_video.v`: счётчики и адрес по схеме (VM_A0 / VM_A1 / 8/64PX), 4 слота; удвоитель `p4096_scandbl.v` хранит RGB 12 бит после палитры, кадр 896×640 / 720×576 на 28 МГц.
+- Проверки (Verilator, `make sim-video` / `sim-int` / `sim-boot`): кадр стандартного режима совпадает с `p4096_vmodel.py` точка в точку; меню 128 грузится (и в турбо 14); INT: `int_test.asm` в 4 фазах HALT — первые полосы бордюра в тех же точках, что у unreal-ng PENTAGON (INT в строке 239, T 220 от начала строки h = 16, то есть 17988 T до бумаги, 32 T; unreal-ng docs/timing/pentagon-border-timing.md: фаза HALT квантует INT по 4 T, бордюр там +1 T).
+- Схема HW.md: `SRA14` = gl и (`T_DOS` или `SPAGE0`) (без инверсии; проверено загрузкой).
+- Плата Mini G (сборка 26112001, 5 699 LUT / 37 %, 3 RAMB16, тайминг выполнен и в режиме ядра): меню 128 на HDMI, 128 BASIC с USB-клавиатуры, `BORDER 2` (красный бордюр), `PLAY "cdefgab"` — ноты AY в левом канале HDMI-звука; после сброса с CPU 14 МГц меню снова грузится (что пункт OSD применился, не подтверждено). Найдено: в тишине звук имел сдвиг −10240 — исправлено (тишина = 0), в следующей сборке.
+- Отзыв пользователя по OSD (2026-11-20): CPU, INT, Magic, Reset — ок; «INT X corr» и подписи значений пунктов не нравятся — обсудить; джойстиков два: Joystick L / Joystick R с вариантами profi / tsconf (Kempston, Sinclair1, Sinclair2, Cursor, QAOPM, QAOPS), по умолчанию L = Kempston, R = Sinclair1 (Sinclair и Cursor — через hid_parser JOY_TYPE, как в tsconf). Игры с ленты пока не проверяем.
+- Плата, сборка 26112002 (5 683 LUT, тайминг выполнен в обоих режимах): тишина звука = 0 (сдвиг исправлен); Turbo 14 через OSD — `BEEP 1,0` 720 Гц / 0,36 с против 262 Гц / 1,00 с на 3,5 МГц, то есть ×2,75, а не ×4: цикл BEEP в ПЗУ, а каждый байт ПЗУ из SDRAM ждёт WAIT (кэш ПЗУ в BRAM — если понадобится «No wait», вместе с WAITP Ф3); Kempston L: `IN 31` = 17 (вправо + огонь); джойстик R «Sinclair1» даёт клавиши 1-5 (вправо «2», огонь «5»): нумерация `hid_parser` / tsconf / profi, у Fuse и Interface 2 «Sinclair 1» = 6-0 — пользователь: оставить как в tsconf / profi (одинаково во всех ядрах).
+- OSD Ф1 (решение пользователя 2026-11-20): Turbo (Off / 7 MHz / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T: XJ3 вошёл в пункт INT), Joystick L / R (Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS, по умолчанию Kempston / Sinclair1; через `hid_parser`, как tsconf), Magic (F11), Reset (F12) — кадр одобрен пользователем 2026-11-20 (сборка 26112002).
 
 ### Ф2 — видеорежимы и палитра (ветка f2-video)
 
@@ -152,7 +164,7 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 
 ## OSD (набросок, показать пользователю до мержа Ф1)
 
-- Ф1: CPU (3.5 / 7 / 14 MHz), INT (Pentagon / Firm), INT X corr (как XJ3), Joystick, Reset (Menu+F12), Magic (F11).
+- Ф1: Turbo (Off / 7 / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T), Joystick L / R, Magic (F11), Reset (F12).
 - Ф2: 512 Ink (цвет и яркость), 512 Colour, FlashColor, GigaScreen auto, Palette (On / Off, как XJ1-XJ3 TopBoard), Video out (по Ф0).
 - Ф3: Memory (схемы 0-6 #FC37), 7FFD D5 (Lock / Ext), +3 mode, Multitask, ROM emu (страницы #FD37), Reset to (Gluk / Menu-128 / TR-DOS / TR-DOS keep / BASIC 48 / HDD), Boot (Direct / BIOS).
 - Ф4: FDD A-D (образы), HDD Master / Slave (образы), GS, TurboSound / FM, SoundDrive, Mouse.

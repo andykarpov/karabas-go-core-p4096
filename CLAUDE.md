@@ -8,7 +8,11 @@ A Pentagon-4096 core (`p4096`) for the Karabas Go, Mini and Mini G boards (Xilin
 
 User decisions (2026-11-19): the whole machine; all video modes and extended ports first; BIOS Setup settings in the OSD (the BIOS port registers stay, the OSD sets their reset values, an optional "Boot BIOS"); licence: the user writes to the author, meanwhile assume the open project may be used; core id `p4096`; repo local only (GitHub later, the user's call).
 
-Status: Ф0 done and merged (2026-11-19). Next: Ф1 Pentagon-128 on Mini G, branch `f1-minig`.
+Status: Ф0 done and merged (2026-11-19). Ф1 Pentagon-128 on Mini G done and merged (2026-11-20, build 26112002, Mini G hw ok). Next: Ф2 video modes and palette, branch `f2-video`.
+
+## Simulation
+
+`make -C src sim-video` / `sim-int` / `sim-boot` (Verilator, `src/sim/run_p4096_sim.sh`): the machine `rtl/p4096/p4096.v` with a RAM / ROM model; frames compared with `p4096_vmodel.py` and with unreal-ng (emu-shot).
 
 ## Tools
 

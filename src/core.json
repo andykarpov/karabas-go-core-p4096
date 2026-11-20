@@ -1,0 +1,106 @@
+{
+    "id": "p4096",
+    "name": "Pentagon-4096",
+    "visible": true,
+    "type": "osd",
+    "order": 42,
+    "eeprom_bank": 255,
+    "roms": [
+        {
+            "filename": "roms/glukpen.rom",
+            "address": 0
+        },
+        {
+            "filename": "roms/tr5_03.rom",
+            "address": 16384
+        },
+        {
+            "filename": "roms/128_std.rom",
+            "address": 32768
+        },
+        {
+            "filename": "roms/basic48_128_std.rom",
+            "address": 49152
+        }
+    ],
+    "boards": {
+        "minig": {
+            "link": 2,
+            "build": "26112002",
+            "bitstream": "karabas_minig.bin"
+        }
+    },
+    "osd": [
+        {
+            "type": "S",
+            "name": "Turbo",
+            "index": 2,
+            "options": [
+                "Off",
+                "7 MHz",
+                "14 MHz"
+            ],
+            "default": 0,
+            "hotkey": "Menu+F2"
+        },
+        {
+            "type": "S",
+            "name": "INT",
+            "index": 3,
+            "options": [
+                "Pentagon",
+                "Pent -2T",
+                "Firm",
+                "Firm -2T"
+            ],
+            "default": 0
+        },
+        {
+            "type": "S",
+            "name": "Joystick L",
+            "index": 4,
+            "options": [
+                "Kempston",
+                "Sinclair1",
+                "Sinclair2",
+                "Cursor",
+                "QAOPM",
+                "QAOPS"
+            ],
+            "default": 0
+        },
+        {
+            "type": "S",
+            "name": "Joystick R",
+            "index": 5,
+            "options": [
+                "Kempston",
+                "Sinclair1",
+                "Sinclair2",
+                "Cursor",
+                "QAOPM",
+                "QAOPS"
+            ],
+            "default": 1
+        },
+        {
+            "type": "-"
+        },
+        {
+            "type": "T",
+            "name": "Magic",
+            "index": 1,
+            "options": null,
+            "default": 0,
+            "hotkey": "F11"
+        },
+        {
+            "type": "T",
+            "name": "Reset",
+            "index": 0,
+            "options": null,
+            "default": 0,
+            "hotkey": "F12"
+        }
+    ]
+}
