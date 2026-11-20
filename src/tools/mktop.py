@@ -15,6 +15,7 @@ Go: no HDMI, no FT_CLK_OUT, no ADC: the FPGA and the FT812 share the video DAC (
 Every replacement must match once, else this stops.  Run in src/:  python3 tools/mktop.py [--ports BOARD=FILE]
 """
 import os
+import re
 import sys
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -37,7 +38,8 @@ def cut(s, start, end, new, what):
 
 def ports_of(text, board):
     i = text.index("module karabas_%s_top" % board)
-    return text[i:text.index("\n);", i) + 3]
+    m = re.compile(r"\n[ \t]*\);").search(text, i)      # the end of the port list (may be indented)
+    return text[i:m.start()] + "\n);"
 
 
 def mini(b):

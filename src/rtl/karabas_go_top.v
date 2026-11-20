@@ -124,33 +124,6 @@ module karabas_go_top (
 	output wire FLASH_SCK,
 	output wire FLASH_WP_N,
 	output wire FLASH_HOLD_N	
-   );
-// karabas: made by src/tools/mktop_go.py from karabas_minig_top.v (do not edit it, change Mini G)
-
-// unused signals yet
-assign FLASH_CS_N 	= 1'b1;
-assign FLASH_DI 		= 1'b1;
-assign FLASH_SCK 		= 1'b0;
-assign FLASH_WP_N 	= 1'b1;
-assign FLASH_HOLD_N 	= 1'b1;
-
-// system clocks
-wire clk_sys, clk_8mhz, clk_bus, clk_bus_pll, clk_12mhz;
-wire locked, areset;
-
-// VCO 50 * 37 / 2 = 925 MHz, phase 0: clk_sys 84.09 MHz (/11), clk_8 7.97 MHz (/116), clk_bus 28.03 MHz (/33,
-// every third edge of clk_sys), MIDI 12.01 MHz (/77). Its PLL output of clk_bus has no BUFG in kg_pll: it drives
-// the BUFG of clk_bus and the BUFGMUXes of hdmi_pll (no BUFG in front of them).
-wire [5:0] pll_clk;
-kg_pll #(
-	.DIVCLK_DIVIDE(2), .CLKFBOUT_MULT(37),
-	.CLKOUT0_DIVIDE(11), .CLKOUT1_DIVIDE(116), .CLKOUT2_DIVIDE(33), .CLKOUT3_DIVIDE(77),
-	.BUFG_MASK(6'b001011)
-) pll (
-	.clk_in			(CLK_50MHZ),
-	.rst				(1'b0),
-	.clk_out			(pll_clk),
-	.locked			(locked)
 );
 
 // the configuration flash is not used: its select high
