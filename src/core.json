@@ -92,6 +92,16 @@
             "default": 1
         },
         {
+            "type": "S",
+            "name": "Mouse",
+            "index": 19,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0
+        },
+        {
             "type": "-"
         },
         {
@@ -103,6 +113,11 @@
             "type": "M",
             "name": "System",
             "open": 2
+        },
+        {
+            "type": "M",
+            "name": "Sound",
+            "open": 3
         },
         {
             "type": "-"
@@ -286,6 +301,18 @@
             ],
             "default": 1,
             "page": 2
+        },
+        {
+            "type": "S",
+            "name": "SoundDrive",
+            "index": 20,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
         }
-    ]
+    ],
+    "rtc_mode": 0
 }

@@ -47,7 +47,8 @@ reg reset = 1'b1;
 p4096 dut (
 	.clk(clk), .reset(reset),
 	.turbo(turbo), .turbo14_wait($test$plusargs("waitp")), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
-	.kbd_a(kbd_a), .kbd_d(kbd_d), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
+	.kbd_a(kbd_a), .kbd_d(kbd_d), .joy(5'b00000), .tape_in(1'b0), .mouse_en(1'b1), .ms_x(8'h12), .ms_y(8'h34), .ms_z(4'h0), .ms_b(3'b000), .sd_en(1'b1),
+	.rtc_a(), .rtc_di(), .rtc_wr(), .rtc_do(8'h00), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_wr(rom_wr), .rom_din(rom_din), .rom_q(rom_q), .rom_done(rom_done),
 	.dot_we(dot_we), .dot_x(dot_x), .dot_line(dot_line), .dot_rgb(dot_rgb), .line_start(line_start),

@@ -42,6 +42,20 @@ module p4096 (
 	input  wire [4:0]  kbd_d,
 	input  wire [4:0]  joy,
 	input  wire        tape_in,
+	// Kempston mouse (#FADF buttons, #FBDF X, #FFDF Y): kg_cursor of the top; buttons {middle, right, left} high
+	input  wire        mouse_en,
+	input  wire [7:0]  ms_x,
+	input  wire [7:0]  ms_y,
+	input  wire [3:0]  ms_z,
+	input  wire [2:0]  ms_b,
+	// SoundDrive / Covox (OSD)
+	input  wire        sd_en,
+	// CMOS (Gluk: #DFF7 address, #BFF7 data, open with #EFF7 D7): the clock registers of kg_mcu2 (RTC_A -> RTC_DO a
+	// clock later; a write is RTC_CS and !RTC_WR_N for one clock)
+	output reg  [7:0]  rtc_a = 8'd0,
+	output wire [7:0]  rtc_di,
+	output wire        rtc_wr,
+	input  wire [7:0]  rtc_do,
 	output reg         tape_out = 1'b0,
 
 	// RAM
@@ -175,6 +189,13 @@ wire p_eff7 = !a[3] && a[2] && a[6] && a[14:12] == 3'b110;
 wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
 wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
+// CMOS (DD90 as #EFF7): #BFF7 (A14 A13 A12 = 011) data, #DFF7 (101) address; open with #EFF7 D7 (README)
+wire p_rtcd = !a[3] && a[2] && a[6] && a[14:12] == 3'b011 && eff7[7];
+wire p_rtca = !a[3] && a[2] && a[6] && a[14:12] == 3'b101 && eff7[7];
+// Kempston mouse (/P_MOUSE, DD146): A0 = A1 = A2 = 1, A5 = 0, A6 = 1, A12 = 1, A15 = 1; A8 / A10 select
+wire p_mouse = a[0] && a[1] && a[2] && !a[5] && a[6] && a[12] && a[15] && mouse_en;
+// SoundDrive (standard ports of 1.05, TopBoard DD11 чек): #0F, #1F, #4F, #5F; Covox #FB; not in TR-DOS
+reg [7:0] sd_a = 8'd0, sd_b = 8'd0, sd_c = 8'd0, sd_d = 8'd0, sd_fb = 8'd0;
 
 // #FC37: EM0 D0-D1, EM1 D2-D3, 7FD5_BLK D4, HLOAD D5, MTASK_ON D6, MODE_3+ D7
 wire [1:0] em0 = fc37[1:0], em1 = fc37[3:2];
@@ -199,6 +220,7 @@ always @(posedge clk) begin
 		dfd <= 3'd0; rr_1f <= 1'b0; shrom <= 1'b0; ra15m <= 1'b0; fd1_4 <= 1'b0; fd1_7 <= 1'b0;
 		p3_dos <= 1'b0; p3_d1 <= 1'b0; p3_d2 <= 1'b0;
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
+		sd_a <= 8'd0; sd_b <= 8'd0; sd_c <= 8'd0; sd_d <= 8'd0; sd_fb <= 8'd0;
 		eff7 <= 8'd0; fc37 <= fc37_init; fd37 <= 8'd0; ff37 <= ff37_init;
 		fe37 <= {int_firm, fe37_init};
 	end else if (!mode3 && (p3_dos || p3_d1 || p3_d2)) begin
@@ -207,6 +229,16 @@ always @(posedge clk) begin
 		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
 	end else if (iowr_s) begin
 		if (p_eff7) eff7 <= cpu_do;
+		if (p_rtca) rtc_a <= cpu_do;
+		if (!dos && sd_en)
+			case (a[7:0])
+				8'h0F: sd_a <= cpu_do;
+				8'h1F: sd_b <= cpu_do;
+				8'h4F: sd_c <= cpu_do;
+				8'h5F: sd_d <= cpu_do;
+				8'hFB: sd_fb <= cpu_do;
+				default: ;
+			endcase
 		if (p_bios)
 			case (a[9:8])
 				2'd0: fc37 <= cpu_do;
@@ -243,6 +275,9 @@ always @(posedge clk) begin
 		end
 	end
 end
+
+assign rtc_di = cpu_do;
+assign rtc_wr = iowr_s && p_rtcd;
 
 reg [7:0] osd_fe37_d = 8'd0;
 always @(posedge clk) osd_fe37_d <= {int_firm, fe37_init};
@@ -528,6 +563,10 @@ always @(*) begin
 			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
+		else if (p_rtcd)
+			cpu_di = rtc_do;
+		else if (p_mouse)
+			cpu_di = !a[8] ? {ms_z, 1'b1, !ms_b[2], !ms_b[0], !ms_b[1]} : a[10] ? ms_y : ms_x;
 		else if (p_kj)
 			cpu_di = {3'b000, joy};
 		else if (p_ff)
@@ -549,8 +588,10 @@ reg tape_in_r = 1'b0;
 always @(posedge clk) begin
 	tape_in_r <= tape_in;
 	sum_l <= {4'd0, s0a} + {4'd0, s1a} + {5'd0, s0b[7:1]} + {5'd0, s1b[7:1]} +
+	         {4'd0, sd_a} + {4'd0, sd_b} + {5'd0, sd_fb[7:1]} +
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
 	sum_r <= {4'd0, s0c} + {4'd0, s1c} + {5'd0, s0b[7:1]} + {5'd0, s1b[7:1]} +
+	         {4'd0, sd_c} + {4'd0, sd_d} + {5'd0, sd_fb[7:1]} +
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
 	audio_l <= {sum_l, 4'd0};
 	audio_r <= {sum_r, 4'd0};

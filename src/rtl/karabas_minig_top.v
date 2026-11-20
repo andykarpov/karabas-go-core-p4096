@@ -183,6 +183,10 @@ IBUFG ibufg_mcu_sck(.I(MCU_SCK), .O(mcu_sck_ibufg));
 BUFG bufg_mcu_sck(.I(mcu_sck_ibufg), .O(mcu_sck));
 
 wire [55:0] mcu_kbd;
+wire [7:0] ms_x, ms_y, mcu_ms_z, mcu_ms_b;
+wire mcu_ms_wr;
+wire [7:0] rtc_a, rtc_di, rtc_do;
+wire rtc_wr;
 wire [15:0] mcu_joy_l, mcu_joy_r;
 wire [5:0] mcu_btns;
 wire mcu_busy, dvi_only;
@@ -201,7 +205,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 19;
+localparam SW_N = 21;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -212,7 +216,8 @@ kg_mcu2 #(
 	.ENABLE_OSD(1),
 	.ENABLE_IMG(0),
 	.ENABLE_PORTS(4'b0000),
-	.ENABLE_RTC(0),
+	.ENABLE_RTC(1),
+	.RTC_SKIP_0D(1),               // MC146818 (core.json rtc_mode 0): C / D are flags
 	.ENABLE_AUX(0),
 	.ENABLE_FT(1),
 	.ENABLE_SD2(0)
@@ -249,11 +254,11 @@ kg_mcu2 #(
 	.PS2_CODE		(),
 	.PS2_KIND		(),
 	.PS2_WR			(),
-	.MS_X				(),
-	.MS_Y				(),
-	.MS_Z				(),
-	.MS_B				(),
-	.MS_WR			(),
+	.MS_X				(ms_x),
+	.MS_Y				(ms_y),
+	.MS_Z				(mcu_ms_z),
+	.MS_B				(mcu_ms_b),
+	.MS_WR			(mcu_ms_wr),
 	.JOY_L			(mcu_joy_l),
 	.JOY_R			(mcu_joy_r),
 	.JOY_WR			(),
@@ -313,15 +318,15 @@ kg_mcu2 #(
 	.PORT_IN_FULL	(),
 	.PORT_STAT		(),
 	.PORT_STAT_WR	(),
-	.RTC_A			(8'd0),
-	.RTC_DI			(8'd0),
-	.RTC_CS			(1'b0),
-	.RTC_WR_N		(1'b1),
+	.RTC_A			(rtc_a),
+	.RTC_DI			(rtc_di),
+	.RTC_CS			(1'b1),
+	.RTC_WR_N		(!rtc_wr),
 	.MATRIX_CMD		(),
 	.MATRIX_CMD_WR	(),
 	.DEBUG_ADDR		(16'd0),
 	.DEBUG_DATA		(16'd0),
-	.RTC_DO			(),
+	.RTC_DO			(rtc_do),
 	.FT_SPI_ON		(mcu_ft_spi_on),
 	.FT_VGA_ON		(mcu_ft_vga_on),
 	.FT_RESET		(mcu_ft_reset),
@@ -365,6 +370,8 @@ wire sw_mtask = softsw[15*8];            // Multitask (#FC37 D6)
 wire sw_boot_bios = softsw[16*8];        // Boot: Direct / BIOS (#FF37 = 23 as BIOS leaves it / 00: BIOS v4.2 runs)
 wire [1:0] sw_reset_to = softsw[17*8 +: 2];   // Reset to (Direct): Gluk / Menu-128 / TR-DOS / BASIC 48
 wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No wait
+wire sw_mouse_off = softsw[19*8];        // 19 Mouse On / Off (Kempston mouse)
+wire sw_sd_off = softsw[20*8];           // 20 SoundDrive On / Off
 reg [3:0] em;
 always @(*)
 	case (sw_mem)
@@ -441,6 +448,25 @@ hid_parser hid_parser(
 // stay off: Pentagon reads 0 there)
 wire [4:0] kjoy = joy_do[4:0];
 
+// ---------- mouse: USB -> kg_cursor -> Kempston (as core-zxuno) ----------
+reg ms_upd = 1'b0;
+always @(posedge clk_bus) if (mcu_ms_wr) ms_upd <= ~ms_upd;
+wire [7:0] cursor_x, cursor_y;
+wire [3:0] cursor_z;
+wire [2:0] cursor_b;
+kg_cursor #(.Z_W(4), .Z_NEG(1), .Z_ACC(1)) cursor(
+	.clk				(clk_bus),
+	.ms_x				(ms_x),
+	.ms_y				(ms_y),
+	.ms_z				(mcu_ms_z[3:0]),
+	.ms_b				(mcu_ms_b[2:0]),
+	.ms_upd			(ms_upd),
+	.x					(cursor_x),
+	.y					(cursor_y),
+	.z					(cursor_z),
+	.b					(cursor_b)
+);
+
 // tape in
 reg tape_in_r = 1'b0;
 always @(posedge clk_bus) tape_in_r <= TAPE_IN;
@@ -475,6 +501,16 @@ p4096 p4096 (
 	.kbd_d			(kbd_do[4:0]),
 	.joy				(kjoy),
 	.tape_in			(tape_in_r),
+	.mouse_en		(!sw_mouse_off),
+	.ms_x				(cursor_x),
+	.ms_y				(cursor_y),
+	.ms_z				(cursor_z),
+	.ms_b				(cursor_b),
+	.sd_en			(!sw_sd_off),
+	.rtc_a			(rtc_a),
+	.rtc_di			(rtc_di),
+	.rtc_wr			(rtc_wr),
+	.rtc_do			(rtc_do),
 	.tape_out		(tape_out),
 	.mem_a			(mem_a),
 	.mem_rd			(mem_rd),
