@@ -426,7 +426,7 @@ wire [7:0] mem_d, mem_q;
 wire dot_we, line_start;
 wire [9:0] dot_x;
 wire [8:0] dot_line;
-wire [11:0] dot_rgb;
+wire [17:0] dot_rgb;
 wire [15:0] audio_l, audio_r;
 wire tape_out;
 

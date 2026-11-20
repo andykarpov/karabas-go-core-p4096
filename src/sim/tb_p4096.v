@@ -34,7 +34,7 @@ reg rom_done = 1'b0;
 wire dot_we, line_start;
 wire [9:0] dot_x;
 wire [8:0] dot_line;
-wire [11:0] dot_rgb;
+wire [17:0] dot_rgb;
 wire [7:0] kbd_a;
 wire [15:0] audio_l, audio_r, cpu_a;
 wire cpu_m1_n, int_n, tape_out;
@@ -42,7 +42,7 @@ reg reset = 1'b1;
 
 p4096 dut (
 	.clk(clk), .reset(reset),
-	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0),
+	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1),
 	.kbd_a(kbd_a), .kbd_d(5'b11111), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_q(rom_q), .rom_done(rom_done),
@@ -77,7 +77,7 @@ always @(posedge clk) begin
 end
 
 // frame dump: window lines L = 0..303 (v = 256.. 319, 0..239), dots 128..895
-reg [11:0] frame_buf [0:304*768-1];
+reg [17:0] frame_buf [0:304*768-1];
 integer L;
 always @(posedge clk) begin
 	if (line_start && dot_line == 9'd256) nframe = nframe + 1;
@@ -133,7 +133,7 @@ initial begin
 	wait (nframe == frames + 1);
 	if ($value$plusargs("dump=%s", fname)) begin
 		fd = $fopen(fname, "w");
-		for (i = 0; i < 304 * 768; i = i + 1) $fwrite(fd, "%03x\n", frame_buf[i]);
+		for (i = 0; i < 304 * 768; i = i + 1) $fwrite(fd, "%05x\n", frame_buf[i]);
 		$fclose(fd);
 	end
 	if (fl != 0) $fclose(fl);

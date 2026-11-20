@@ -16,7 +16,7 @@ module p4096_scandbl (
 	input  wire        dot_we,
 	input  wire [9:0]  dot_x,
 	input  wire [8:0]  dot_line,
-	input  wire [11:0] dot_rgb,
+	input  wire [17:0] dot_rgb,      // 6 bits a channel: 4 * level or INK + 3 * PAPER (p4096_video.v)
 	input  wire        line_start,
 
 	output reg  [7:0]  r = 8'd0,
@@ -30,7 +30,7 @@ module p4096_scandbl (
 localparam HS_BEG = 10'd20, HS_END = 10'd84, DE_BEG = 10'd152, DE_END = 10'd872;
 localparam O_ACT_BEG = 10'd16, O_ACT_END = 10'd592, O_VS_BEG = 10'd597, O_VS_END = 10'd602;
 
-reg [11:0] buf_mem [0:2047];
+reg [17:0] buf_mem [0:2047];
 always @(posedge clk)
 	if (dot_we) buf_mem[{dot_line[0], dot_x}] <= dot_rgb;
 
@@ -54,16 +54,24 @@ always @(posedge clk) begin
 end
 
 wire [9:0] o = {lr, half};
-reg [11:0] q = 12'd0;
+// 8 bits = 17 * m / 4 (m = 4 * level: 17 * level, the levels of the palette as 0..255)
+function [7:0] lvl8(input [5:0] m);
+	reg [9:0] x;
+	begin
+		x = {m, 4'b0000} + {4'b0000, m};
+		lvl8 = x[9:2];
+	end
+endfunction
+reg [17:0] q = 18'd0;
 reg de0 = 1'b0, hs0 = 1'b0, vs0 = 1'b0;
 always @(posedge clk) begin
 	q <= buf_mem[{rbank, ox}];
 	de0 <= (ox >= DE_BEG) && (ox < DE_END) && (o >= O_ACT_BEG) && (o < O_ACT_END);
 	hs0 <= (ox >= HS_BEG) && (ox < HS_END);
 	vs0 <= (o >= O_VS_BEG) && (o < O_VS_END);
-	r <= de0 ? {q[11:8], q[11:8]} : 8'd0;
-	g <= de0 ? {q[7:4], q[7:4]} : 8'd0;
-	b <= de0 ? {q[3:0], q[3:0]} : 8'd0;
+	r <= de0 ? lvl8(q[17:12]) : 8'd0;
+	g <= de0 ? lvl8(q[11:6]) : 8'd0;
+	b <= de0 ? lvl8(q[5:0]) : 8'd0;
 	de <= de0;
 	hs <= hs0;
 	vs <= vs0;

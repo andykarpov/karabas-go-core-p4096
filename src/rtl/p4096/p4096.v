@@ -25,7 +25,9 @@ module p4096 (
 
 	// settings (OSD)
 	input  wire [1:0]  turbo,         // 0 3.5, 1 7, 2 14 MHz
-	input  wire        int_firm,      // 0 Pentagon, 1 Firm (+16 lines, +48 T)
+	input  wire        int_firm,      // OSD: the value of #FE37 D7 (INT_SEL) at reset and when the OSD changes it
+	input  wire [6:0]  fe37_init,     // #FE37 D0-D6 at reset (BIOS v4.2 writes 07: 512 ink white)
+	input  wire        pal_en,        // OSD Palette: 0 = the standard 16 colours (XJ1-XJ3 of the TopBoard)
 	input  wire        int_xj3,       // the XJ3 jumper: INT 2 T earlier
 	input  wire        nmi,           // Magic (1: NMI held)
 
@@ -54,7 +56,7 @@ module p4096 (
 	output wire        dot_we,
 	output wire [9:0]  dot_x,
 	output wire [8:0]  dot_line,
-	output wire [11:0] dot_rgb,
+	output wire [17:0] dot_rgb,       // 6 bits a channel (p4096_video.v)
 	output wire        line_start,
 
 	// sound: signed, the sum of AY / TS, beeper and tape
@@ -78,10 +80,16 @@ wire [7:0] attr_port;
 reg scr = 1'b0;
 reg [2:0] border = 3'd0;
 reg border_bri = 1'b0;
+reg [7:0] eff7 = 8'd0;
+reg [7:0] fc37 = 8'd0, fd37 = 8'd0, fe37 = 8'd0, ff37 = 8'd0;   // BIOS ports (write only)
+wire int_go;
+wire pal_we;
+wire [11:0] pal_d;
 
 p4096_video video (
-	.clk(clk), .reset(1'b0),
+	.clk(clk), .reset(1'b0), .pal_rst(reset),
 	.scr(scr), .border(border), .border_bri(border_bri),
+	.eff7(eff7), .fe37(fe37), .frame_latch(int_go), .pal_en(pal_en), .pal_we(pal_we), .pal_d(pal_d),
 	.vf_a(vf_a), .mem_q(mem_q),
 	.ph(ph), .px(px), .h(h), .v(v), .c5(c5),
 	.attr_port(attr_port),
@@ -137,6 +145,10 @@ wire p_fe_w = !a[0] && a[2] && a[6];
 wire p_fe_r = !a[0];
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
 wire p_ff = a[7:0] == 8'hFF && !dos;
+// #xxF7 (DD90): A3 = 0, A2 = 1, A6 = 1; A14 A13 A12 = 110: #EFF7
+wire p_eff7 = !a[3] && a[2] && a[6] && a[14:12] == 3'b110;
+// BIOS ports #FC37-#FF37 (DD60), write only: A3 = A6 = A7 = 0, A2 = 1, A10 = 1; A9 A8 select
+wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
 wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
 
@@ -151,7 +163,19 @@ always @(posedge clk) begin
 	if (reset) begin
 		p7_page <= 3'd0; scr <= 1'b0; spage0 <= 1'b0; p7_d5 <= 1'b0; p7_d6 <= 1'b0; p7_d7 <= 1'b0;
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
+		eff7 <= 8'd0; fc37 <= 8'd0; fd37 <= 8'd0; ff37 <= 8'd0;
+		fe37 <= {int_firm, fe37_init};
+	end else if (int_firm != int_firm_d) begin
+		fe37[7] <= int_firm;                   // the OSD changed INT
 	end else if (iowr_s) begin
+		if (p_eff7) eff7 <= cpu_do;
+		if (p_bios)
+			case (a[9:8])
+				2'd0: fc37 <= cpu_do;
+				2'd1: fd37 <= cpu_do;
+				2'd2: fe37 <= cpu_do;
+				2'd3: ff37 <= cpu_do;
+			endcase
 		if (p_fe_w) begin
 			border <= cpu_do[2:0];
 			tape_out <= cpu_do[3];
@@ -170,6 +194,14 @@ always @(posedge clk) begin
 		end
 	end
 end
+
+reg int_firm_d = 1'b0;
+always @(posedge clk) int_firm_d <= int_firm;
+
+// palette (TopBoard): #xxFF write outside TR-DOS with #FF37 D5 (PAL_ON); B = D0 D5 A8 A13, R = D1 D6 A9 A14,
+// G = D4 D7 A12 A15 (the high bit first); the K155RU2 outputs are inverted: the level is the inverse
+assign pal_we = iowr_s && p_ff && ff37[5];
+assign pal_d = ~{cpu_do[1], cpu_do[6], a[9], a[14], cpu_do[4], cpu_do[7], a[12], a[15], cpu_do[0], cpu_do[5], a[8], a[13]};
 
 // ---------------- TR-DOS ----------------
 // on: M1 from 3Dxx while ROM 48 is on; off: M1 from the RAM (docs/HW.md "TR-DOS и ВГ93")
@@ -259,12 +291,13 @@ wire [7:0] ram_q = rd_cpu_q ? mem_q : cpu_q;
 // v = 0, T 64. Matched to unreal-ng by src/sim/run_p4096_sim.sh int (the border stripes of int_test.asm at the
 // same points): INT begins at v = 239, T 220 (h = 15, px 0). Firm: +48 T and 16 lines (v = 255 + 48 T = v 256,
 // T 44); XJ3: 2 T earlier.
-wire [8:0] int_v = int_firm ? 9'd256 : 9'd239;
-wire [7:0] int_t0 = int_firm ? 8'd44 : 8'd220;
+wire int_sel = fe37[7];                    // INT_SEL: 0 Pentagon, 1 Firm
+wire [8:0] int_v = int_sel ? 9'd256 : 9'd239;
+wire [7:0] int_t0 = int_sel ? 8'd44 : 8'd220;
 wire [7:0] int_t = int_xj3 ? int_t0 - 8'd2 : int_t0;
 wire [5:0] hrel = (h >= 6'd16) ? h - 6'd16 : h + 6'd40;
 wire [7:0] line_t = {hrel, px[2:1]};        // the T of the line (0..223)
-wire int_go = (v == int_v) && (line_t == int_t) && !px[0] && (ph == 2'd0);
+assign int_go = (v == int_v) && (line_t == int_t) && !px[0] && (ph == 2'd0);
 reg [7:0] int_cnt = 8'd0;     // 32 T = 256 clocks
 always @(posedge clk) begin
 	if (int_go)
@@ -296,6 +329,8 @@ always @(*) begin
 			cpu_di = {1'b1, tape_in, 1'b1, kbd_d};
 		else if (p_fffd)
 			cpu_di = ay_do;
+		else if (p_eff7)
+			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
 		else if (p_kj)
