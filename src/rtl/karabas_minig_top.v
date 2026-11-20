@@ -201,7 +201,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 12;
+localparam SW_N = 19;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -357,12 +357,30 @@ wire sw_flashcol = softsw[8*8];
 wire sw_giga = softsw[9*8];
 wire sw_pal_off = softsw[10*8];
 wire sw_video_full = softsw[11*8];
+// 12..17: the system (the reset values of the BIOS ports, what BIOS Setup sets; applied at the next reset)
+wire [2:0] sw_mem = softsw[12*8 +: 3];   // Memory: the schemes 0-6 of #FC37 (README)
+wire sw_d5_mem = softsw[13*8];           // 7FFD D5: Lock / Memory (#FC37 D4 = 1 / 0)
+wire sw_plus3 = softsw[14*8];            // +3 mode (#FC37 D7)
+wire sw_mtask = softsw[15*8];            // Multitask (#FC37 D6)
+wire sw_boot_bios = softsw[16*8];        // Boot: Direct / BIOS (#FF37 = 23 as BIOS leaves it / 00: BIOS v4.2 runs)
+wire [1:0] sw_reset_to = softsw[17*8 +: 2];   // Reset to (Direct): Gluk / Menu-128 / TR-DOS / BASIC 48
+wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No wait
+reg [3:0] em;
+always @(*)
+	case (sw_mem)
+		3'd0: em = 4'b0000; 3'd1: em = 4'b0001; 3'd2: em = 4'b0010; 3'd3: em = 4'b0011;
+		3'd4: em = 4'b0111; 3'd5: em = 4'b1010; default: em = 4'b1110;
+	endcase
+wire [7:0] fc37_init = {sw_plus3, sw_mtask, 1'b0, !sw_d5_mem, em};
+wire [7:0] ff37_init = sw_boot_bios ? 8'h00 : 8'h23;
+wire [7:0] p7_init = (sw_reset_to == 2'd3) ? 8'h30 : (sw_reset_to == 2'd2) ? 8'h10 : 8'h00;
 wire [1:0] hw_btn = mcu_btns[1:0];
 
 // ---------- the ROM loader and the storage (SDRAM) ----------
 wire ld_rom_act = ld_active && ld_kind == 2'd0;
 wire ld_rom_wr = ld_wr && ld_kind == 2'd0;
-wire storage_busy, rom_req, rom_done;
+wire storage_busy, rom_req, rom_done, rom_wr;
+wire [7:0] cpu_dout, rom_din;
 wire [18:0] rom_addr;
 wire [7:0] rom_q;
 // the storage and its SDRAM controller: reset by the PLL lock and the reset keys (as core-baseconf)
@@ -370,7 +388,7 @@ reg [1:0] storage_key_rst = 2'b00;
 always @(posedge clk_sys) storage_key_rst <= {storage_key_rst[0], sw_reset | hw_btn[0]};
 baseconf_storage storage(
 	.clk(clk_sys), .reset(!locked || storage_key_rst[1]), .sdram_init_n(locked),
-	.rom_req(rom_req), .rom_wr(1'b0), .rom_addr(rom_addr), .rom_din(8'd0), .rom_dout(rom_q), .rom_done(rom_done),
+	.rom_req(rom_req), .rom_wr(rom_wr), .rom_addr(rom_addr), .rom_din(rom_din), .rom_dout(rom_q), .rom_done(rom_done),
 	.gs_req(1'b0), .gs_wr(1'b0), .gs_addr(21'd0), .gs_din(8'd0), .gs_dout(), .gs_done(),
 	.loader_act(ld_rom_act), .loader_wr(ld_rom_wr), .loader_addr(ld_addr), .loader_data(ld_data),
 	.fl_wr(1'b0), .fl_a(32'd0), .fl_d(8'd0),
@@ -442,10 +460,16 @@ p4096 p4096 (
 	.clk				(clk_bus),
 	.reset			(machine_reset),
 	.turbo			(sw_cpu),
+	.turbo14_wait	(!sw_turbo_nowait),
 	.int_firm		(sw_int_firm),
 	.int_xj3			(sw_int_xj3),
 	.fe37_init		({sw_giga, sw_flashcol, sw_col512, sw_ink512}),
 	.pal_en			(!sw_pal_off),
+	.fc37_init		(fc37_init),
+	.ff37_init		(ff37_init),
+	.p7_init			(p7_init),
+	.dos_init		(sw_reset_to == 2'd2),
+	.gl_init			(sw_reset_to != 2'd0),
 	.nmi				(magic),
 	.kbd_a			(kbd_a),
 	.kbd_d			(kbd_do[4:0]),
@@ -460,6 +484,8 @@ p4096 p4096 (
 	.mem_q			(mem_q),
 	.rom_req			(rom_req),
 	.rom_addr		(rom_addr),
+	.rom_wr			(rom_wr),
+	.rom_din			(rom_din),
 	.rom_q			(rom_q),
 	.rom_done		(rom_done),
 	.dot_we			(dot_we),
@@ -470,6 +496,7 @@ p4096 p4096 (
 	.audio_l			(audio_l),
 	.audio_r			(audio_r),
 	.cpu_a			(),
+	.cpu_dout		(cpu_dout),
 	.cpu_m1_n		(),
 	.int_n_o			()
 );

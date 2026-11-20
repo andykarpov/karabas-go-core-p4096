@@ -37,6 +37,7 @@ module p4096_video (
 	input  wire        border_bri,   // the last border write was to #F6 (A3 = 0)
 	input  wire [7:0]  eff7,         // D0 16 colors, D1 512x192, D5 multicolor, D6 384x304
 	input  wire [7:0]  fe37,         // D0-D3 512 ink B R G I, D4 512 colour, D5 FlashColor, D6 GigaScreen auto
+	input  wire [4:0]  scr_hi,       // page bits 3-7 of the screens (multitasking: the current block)
 	input  wire        frame_latch,  // KI1024S: the GigaScreen latch takes #7FFD D3 (once a frame, with INT)
 	input  wire        pal_en,       // 0: the standard 16 colours (the old path of the TopBoard, XJ1-XJ3)
 	input  wire        pal_we,       // a write of #xxFF with #FF37 D5: the entry of the index on the output
@@ -101,8 +102,8 @@ end
 reg scr_latch = 1'b0;
 always @(posedge clk) if (frame_latch) scr_latch <= scr;
 wire ggscr = (giga_on && (scr ^ scr_latch)) ? (frame[0] ^ v[0]) : scr;
-wire [7:0] page_main = {5'b00000, 1'b1, ggscr, 1'b1};
-wire [7:0] page_alt  = {5'b00000, 1'b1, ggscr, 1'b0};
+wire [7:0] page_main = {scr_hi, 1'b1, ggscr, 1'b1};
+wire [7:0] page_alt  = {scr_hi, 1'b1, ggscr, 1'b0};
 
 // ---------------- fetch ----------------
 // the cell whose bytes the slot of the next clock fetches: the one after the cell of that slot

@@ -21,12 +21,20 @@
         {
             "filename": "roms/basic48_128_std.rom",
             "address": 49152
+        },
+        {
+            "filename": "roms/plus341.rom",
+            "address": 65536
+        },
+        {
+            "filename": "roms/bios42.rom",
+            "address": 131072
         }
     ],
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112003",
+            "build": "26112009",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -90,6 +98,11 @@
             "type": "M",
             "name": "Video",
             "open": 1
+        },
+        {
+            "type": "M",
+            "name": "System",
+            "open": 2
         },
         {
             "type": "-"
@@ -189,6 +202,90 @@
             ],
             "default": 0,
             "page": 1
+        },
+        {
+            "type": "S",
+            "name": "Turbo 14",
+            "index": 18,
+            "options": [
+                "Original",
+                "No wait"
+            ],
+            "default": 0,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "Memory",
+            "index": 12,
+            "options": [
+                "128K",
+                "Pent 1M",
+                "Profi 1M",
+                "1FFD 512K",
+                "KAY 4M",
+                "Profi+Pent",
+                "Profi+1FFD"
+            ],
+            "default": 5,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "7FFD D5",
+            "index": 13,
+            "options": [
+                "Lock",
+                "Memory"
+            ],
+            "default": 0,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "+3 mode",
+            "index": 14,
+            "options": [
+                "Off",
+                "On"
+            ],
+            "default": 0,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "Multitask",
+            "index": 15,
+            "options": [
+                "Off",
+                "On"
+            ],
+            "default": 0,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "Boot",
+            "index": 16,
+            "options": [
+                "Direct",
+                "BIOS"
+            ],
+            "default": 0,
+            "page": 2
+        },
+        {
+            "type": "S",
+            "name": "Reset to",
+            "index": 17,
+            "options": [
+                "Gluk",
+                "Menu-128",
+                "TR-DOS",
+                "BASIC 48"
+            ],
+            "default": 1,
+            "page": 2
         }
     ]
 }
