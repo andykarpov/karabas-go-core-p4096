@@ -214,8 +214,9 @@ wire [1:0] ld_kind;
 wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
+wire [7:0] ld_slot;
 
-localparam SW_N = 23;
+localparam SW_N = 25;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -276,7 +277,7 @@ kg_mcu2 #(
 	.PS2_CMD			(16'h0000),
 	.PS2_CMD_WR		(1'b0),
 	.LD_KIND			(ld_kind),
-	.LD_SLOT			(),
+	.LD_SLOT			(ld_slot),
 	.LD_SIZE			(),
 	.LD_START		(),
 	.LD_ACTIVE		(ld_active),
@@ -384,6 +385,8 @@ wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No w
 wire sw_mouse_off = softsw[19*8];        // 19 Mouse On / Off (Kempston mouse)
 wire sw_sd_off = softsw[20*8];           // 20 SoundDrive On / Off
 wire sw_gs_off = softsw[22*8];           // 22 General Sound On / Off
+wire sw_opl4_off = softsw[23*8];         // 23 OPL4 (ZXM-MoonSound) On / Off
+wire sw_opl4_nointerp = softsw[24*8];    // 24 OPL4 Interp On / Off (linear interpolation of the samples)
 wire sw_hdd_image = softsw[21*8];        // 21 HDD Master: CF card / Image (HDF0); HDF1 = Slave (image)
 reg [3:0] em;
 always @(*)
@@ -406,6 +409,15 @@ wire [7:0] gs_mdi, gs_mdo, gs_do_i, gs_do;
 wire gs_rd_n, gs_wr_n, gs_done, gs_oe_i, gs_oe;
 wire gs_req = !gs_rd_n || !gs_wr_n;
 wire signed [14:0] gs_l, gs_r;
+// ---------- OPL4 (ZXM-MoonSound, opl4_kg of core-baseconf): the declarations for the storage ----------
+// The FL item "OPL4 ROM" (slot 1): the YRW801 ROM into the sample memory (port 2 of the storage, at 400000)
+wire fl_act = ld_active && ld_kind == 2'd2 && ld_slot == 8'd1;
+wire fl_wr = ld_wr && fl_act;
+wire [21:0] opl4_mem_addr;
+wire opl4_mem_req, opl4_mem_we, opl4_mem_ack;
+wire [7:0] opl4_mem_wdata;
+wire [15:0] opl4_mem_rdata;
+
 // ---------- the ROM loader and the storage (SDRAM) ----------
 wire ld_rom_act = ld_active && ld_kind == 2'd0;
 wire ld_rom_wr = ld_wr && ld_kind == 2'd0;
@@ -421,8 +433,9 @@ baseconf_storage storage(
 	.rom_req(rom_req), .rom_wr(rom_wr), .rom_addr(rom_addr), .rom_din(rom_din), .rom_dout(rom_q), .rom_done(rom_done),
 	.gs_req(gs_req), .gs_wr(!gs_wr_n), .gs_addr(gs_addr), .gs_din(gs_mdo), .gs_dout(gs_mdi), .gs_done(gs_done),
 	.loader_act(ld_rom_act), .loader_wr(ld_rom_wr), .loader_addr(ld_addr), .loader_data(ld_data),
-	.fl_wr(1'b0), .fl_a(32'd0), .fl_d(8'd0),
-	.opl_addr(22'd0), .opl_req(1'b0), .opl_we(1'b0), .opl_wdata(8'd0), .opl_ack(), .opl_rdata(),
+	.fl_wr(fl_wr), .fl_a(ld_addr), .fl_d(ld_data),
+	.opl_addr(opl4_mem_addr), .opl_req(opl4_mem_req), .opl_we(opl4_mem_we), .opl_wdata(opl4_mem_wdata),
+	.opl_ack(opl4_mem_ack), .opl_rdata(opl4_mem_rdata),
 	.busy(storage_busy), .fault(), .sdram_clk(),
 	.sdram_a(SDR_A), .sdram_ba(SDR_BA), .sdram_dqm(SDR_DQM),
 	.sdram_ras_n(SDR_RAS_N), .sdram_cas_n(SDR_CAS_N), .sdram_we_n(SDR_WE_N), .sdram_dq(SDR_DQ)
@@ -505,6 +518,31 @@ gs gs(.CLK(clk_bus), .RESET(gs_rst[1]), .CE(gs_ce), .CE_N(!gs_ce), .MEM_WAIT(gs_
 	.MRFSH_n(), .MWE_n(gs_wr_n), .MRD_n(gs_rd_n), .OUT_L(gs_l), .OUT_R(gs_r));
 assign gs_oe = gs_oe_i && !sw_gs_off;
 assign gs_do = gs_do_i;
+
+// ---------- OPL4: #C4..#C7 FM, #7E / #7F wave, not in TR-DOS; on clk_sys (84 MHz) as core-baseconf ----------
+wire cpu_dos;
+wire opl4_sel, opl4_irq;
+wire [7:0] opl4_do_bus;
+wire signed [15:0] opl4_l, opl4_r;
+reg [7:0] opl4_do_r = 8'hFF;
+always @(posedge clk_bus) opl4_do_r <= opl4_do_bus;
+wire opl4_oe = opl4_sel && !cpu_rd_n && !cpu_iorq_n && !sw_opl4_off;
+reg opl4_irq_r = 1'b0;
+always @(posedge clk_bus) opl4_irq_r <= opl4_irq && !sw_opl4_off;
+reg [1:0] opl4_rst_s = 2'b11;
+always @(posedge clk_sys) opl4_rst_s <= {opl4_rst_s[0], machine_reset || fl_act || sw_opl4_off};
+opl4_kg opl4(.CLK(clk_sys), .CLK28(clk_bus), .RESET(opl4_rst_s[1]),
+	.A(cpu_a[7:0]), .DI(cpu_dout), .DO(opl4_do_bus), .IORQ_n(cpu_iorq_n || sw_opl4_off), .M1_n(cpu_m1_n),
+	.RD_n(cpu_rd_n), .WR_n(cpu_wr_n), .DOS(cpu_dos), .INTERP(!sw_opl4_nointerp), .SEL(opl4_sel), .IRQ(opl4_irq),
+	.MEM_ADDR(opl4_mem_addr), .MEM_REQ(opl4_mem_req), .MEM_WE(opl4_mem_we), .MEM_WDATA(opl4_mem_wdata),
+	.MEM_ACK(opl4_mem_ack), .MEM_RDATA(opl4_mem_rdata),
+	.OUT_L(opl4_l), .OUT_R(opl4_r), .SAMPLE_T());
+// OUT_L / R of clk_sys (held for a sample period) into clk_bus registers, at half
+reg signed [15:0] opl4_l_r = 16'sd0, opl4_r_r = 16'sd0;
+always @(posedge clk_bus) begin
+	opl4_l_r <= sw_opl4_off ? 16'sd0 : opl4_l;
+	opl4_r_r <= sw_opl4_off ? 16'sd0 : opl4_r;
+end
 
 // ---------- the machine ----------
 wire [21:0] mem_a;
@@ -592,8 +630,10 @@ p4096 p4096 (
 	.cpu_iorq_n		(cpu_iorq_n),
 	.cpu_rd_n		(cpu_rd_n),
 	.cpu_wr_n		(cpu_wr_n),
-	.ext_oe			(gs_oe),
-	.ext_do			(gs_do),
+	.ext_int			(opl4_irq_r),
+	.cpu_dos			(cpu_dos),
+	.ext_oe			(gs_oe || opl4_oe),
+	.ext_do			(opl4_oe ? opl4_do_r : gs_do),
 	.cpu_m1_n		(cpu_m1_n),
 	.int_n_o			()
 );
@@ -757,9 +797,9 @@ endfunction
 reg [15:0] mix_l_r = 16'd0, mix_r_r = 16'd0;
 always @(posedge clk_bus) begin
 	mix_l_r <= sat16($signed({3'b000, audio_l[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_l[14]}}, gs_l})) +
-	                 $signed({{2{adc_mix_l[15]}}, adc_mix_l}));
+	                 $signed({{2{adc_mix_l[15]}}, adc_mix_l}) + $signed({{3{opl4_l_r[15]}}, opl4_l_r[15:1]}));
 	mix_r_r <= sat16($signed({3'b000, audio_r[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_r[14]}}, gs_r})) +
-	                 $signed({{2{adc_mix_r[15]}}, adc_mix_r}));
+	                 $signed({{2{adc_mix_r[15]}}, adc_mix_r}) + $signed({{3{opl4_r_r[15]}}, opl4_r_r[15:1]}));
 end
 assign mix_l = mix_l_r;
 assign mix_r = mix_r_r;

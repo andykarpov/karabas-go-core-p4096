@@ -116,6 +116,8 @@ module p4096 (
 	output wire        cpu_wr_n,
 	output wire        int_n_o,
 	// devices outside the machine on the CPU bus (General Sound of the top): their read data, the highest priority
+	input  wire        ext_int,       // an interrupt of a device outside (the FM timer of the OPL4): /INT, not in TR-DOS
+	output wire        cpu_dos,       // T_DOS (the OPL4 does not answer #7E / #7F there: VG93)
 	input  wire        ext_oe,
 	input  wire [7:0]  ext_do
 );
@@ -168,13 +170,14 @@ assign cpu_a = a;
 assign cpu_dout = cpu_do;
 assign cpu_m1_n = m1_n;
 assign cpu_iorq_n = iorq_n;
+assign cpu_dos = dos;
 assign cpu_rd_n = rd_n;
 assign cpu_wr_n = wr_n;
 assign int_n_o = int_n;
 
 z80s_t80pa cpu (
 	.RESET_n(!reset), .CLK(clk), .CEN_p(zpos), .CEN_n(zneg),
-	.WAIT_n(wait_n), .INT_n(int_n), .NMI_n(!nmi_p), .BUSRQ_n(1'b1),
+	.WAIT_n(wait_n), .INT_n(int_n && !(ext_int && !dos)), .NMI_n(!nmi_p), .BUSRQ_n(1'b1),
 	.M1_n(m1_n), .MREQ_n(mreq_n), .IORQ_n(iorq_n), .RD_n(rd_n), .WR_n(wr_n), .RFSH_n(rfsh_n),
 	.HALT_n(), .BUSAK_n(),
 	.A(a), .DI(cpu_di), .DO(cpu_do)

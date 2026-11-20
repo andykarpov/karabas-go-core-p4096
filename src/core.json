@@ -38,7 +38,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112016",
+            "build": "26112017",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -394,6 +394,47 @@
                 "Off"
             ],
             "default": 0,
+            "page": 3
+        },
+        {
+            "type": "S",
+            "name": "OPL4",
+            "index": 23,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
+        },
+        {
+            "type": "S",
+            "name": "OPL4 Interp",
+            "index": 24,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
+        },
+        {
+            "type": "FL",
+            "name": "OPL4 ROM",
+            "slot": 1,
+            "exts": [
+                "rom",
+                "bin"
+            ],
+            "dir": "/p4096",
+            "file": [
+                "yrw801.rom",
+                "YRW801.ROM",
+                "/baseconf/yrw801.rom",
+                "/tsconf/yrw801.rom",
+                "/tsconf/YRW801.ROM"
+            ],
+            "autoload": true,
             "page": 3
         }
     ],
