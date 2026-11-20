@@ -11,9 +11,11 @@
 -- a write two, /WE low from the middle of the first to the middle of the second (ODDR2), the address and the data
 -- stable for both (as core-profi / core-pcxt: /WE half a clock after the address).
 -- ROM: the main ROM pages (core.json "roms", 16 KB each from address 0) in the SDRAM, baseconf_storage of
--- core-baseconf (port 1; GS / OPL4 ports tied off in Ф1); the CPU waits (WAIT) for each ROM byte.
+-- core-baseconf (port 1, through p4096_romcache); port 2: General Sound and the sample memory of the OPL4.
 -- Video: p4096 -> p4096_scandbl (720 x 576 of 896 x 640 at 28 MHz) -> OSD -> HDMI.
 -- Input: USB keyboard (hid_parser -> the matrix), joysticks of kg_mcu2 -> Kempston #1F.
+-- Disks: TRD images A-D (p4096_fdd, wd1793), Nemo IDE (the CF card or HDF images, hdf_ata), CMOS of kg_mcu2.
+-- Sound: AY / TurboSound, SoundDrive, General Sound, OPL4, the ADC; MIDI out on AY port A.
 ------------------------------------------------------------------------------------------------------------------*/
 
 module karabas_minig_top (
