@@ -40,6 +40,11 @@ def make_ram(dst, seed):
         f.write('\n'.join('%02x' % b for b in ram) + '\n')
 
 
+def rgb8(v):
+    """A dot of tb_p4096 (6 bits a channel, m = 4 * level or INK + 3 * PAPER) -> 8-bit RGB (17 * m // 4)."""
+    return tuple((17 * ((v >> sh) & 63)) >> 2 for sh in (12, 6, 0))
+
+
 def read_dump(path):
     vals = [int(x, 16) for x in open(path).read().split()]
     assert len(vals) == 304 * 768, len(vals)
@@ -52,31 +57,30 @@ def to_png(dump, out):
     im = Image.new('RGB', (768, 608))
     for y, row in enumerate(rows):
         for x, v in enumerate(row):
-            c = (((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17)
+            c = rgb8(v)
             im.putpixel((x, 2 * y), c)
             im.putpixel((x, 2 * y + 1), c)
     im.save(out)
 
 
-def compare(dump, ramhex, scr7=False):
+def compare(dump, ramhex, scr7=False, regs=None, quiet=False):
     import p4096_vmodel as vm
     ram = bytes(int(x, 16) for x in open(ramhex).read().split())
     pages = {p: bytearray(ram[p * 16384:(p + 1) * 16384]) for p in range(8)}
-    regs = vm.Regs(scr7=scr7)
-    pal = vm.std_palette()
-    model = vm.render(pages, regs)
+    regs = regs or vm.Regs(scr7=scr7)
+    model = vm.to_rgb(vm.render(pages, regs), regs)
     rows = read_dump(dump)
     bad = 0
     for y in range(304):
         for x in range(768):
-            want = model[y][x]
-            want = 0 if want == -1 else pal[want]
-            if rows[y][x] != want:
-                if bad < 10:
-                    print('diff line %d dot %d: rtl %03x model %03x' % (y, x, rows[y][x], want))
+            got = rgb8(rows[y][x])
+            if got != model[y][x]:
+                if bad < 6 and not quiet:
+                    print('  diff line %d dot %d: rtl %s model %s' % (y, x, got, model[y][x]))
                 bad += 1
-    print('cmp: %d differences' % bad)
-    return 1 if bad else 0
+    if not quiet:
+        print('cmp: %d differences' % bad)
+    return bad
 
 
 def cls(c):
@@ -102,7 +106,7 @@ def compare_shot(dump, png):
     for y in range(288):
         for x in range(352):
             v = rows[y + 16][2 * (x + 16)]
-            ours = cls((((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17))
+            ours = cls(rgb8(v))
             ref = cls(im.getpixel((x, y)))
             if ours != ref:
                 if bad < 10:
@@ -116,7 +120,7 @@ def compare_shot(dump, png):
                     return y, x
     def ours_get(x, y):
         v = rows[y + 16][2 * (x + 16)]
-        return cls((((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17))
+        return cls(rgb8(v))
     print('first stripe point (line, x of the 352 x 288 window): rtl', first_stripe(ours_get),
           'unreal', first_stripe(lambda x, y: cls(im.getpixel((x, y)))))
     # the colour changes on the first stripe line: x of each change, both
@@ -142,7 +146,7 @@ def int_set(d):
     for p in range(4):
         rows = read_dump(os.path.join(d, 'int_%d.txt' % p))
         im = Image.open(os.path.join(d, 'unreal_int_%d.png' % p)).convert('RGB')
-        rs.append(first(lambda x, y: cls(tuple(((rows[y + 16][2 * (x + 16)] >> s) & 15) * 17 for s in (8, 4, 0)))))
+        rs.append(first(lambda x, y: cls(rgb8(rows[y + 16][2 * (x + 16)]))))
         us.append(first(lambda x, y: cls(im.getpixel((x, y)))))
     # a stripe that begins in the blank part of a line shows first on the next one: only the earliest counts
     key = lambda v: sorted(v)
@@ -165,7 +169,7 @@ if __name__ == '__main__':
     elif len(a) == 4 and a[1] == 'cmpshot':
         sys.exit(compare_shot(a[2], a[3]))
     elif len(a) >= 4 and a[1] == 'cmp':
-        sys.exit(compare(a[2], a[3], len(a) > 4 and a[4] == 'scr7'))
+        sys.exit(1 if compare(a[2], a[3], len(a) > 4 and a[4] == 'scr7') else 0)
     else:
         print(__doc__)
         sys.exit(2)

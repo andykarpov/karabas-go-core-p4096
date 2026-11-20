@@ -7,6 +7,7 @@
 #   make sim-video        Verilator: the standard screen against tools/p4096_vmodel.py (seconds)
 #   make sim-int          Verilator + unreal-ng: INT against the raster (int_test.asm, about half a minute)
 #   make sim-boot         Verilator: the 128 menu boots (60 frames, about 40 s)
+#   make sim-modes        Verilator: every video mode against tools/p4096_vmodel.py (about 40 s)
 #
 # Inputs per board: karabas_<board>.prj (the source list, the shared modules as "../modules/rtl/..."), .xst,
 # .ucf, .ut. A step runs again when one of its inputs is newer than its output.
@@ -32,7 +33,7 @@ MAP_OPT = -logic_opt off -ol high -xe n -xt 0 -register_duplication off -r 4 -gl
 PAR_OPT = -ol high -xe n -mt 4
 INCLUDES = $(wildcard ../modules/rtl/mcu/*.vh)
 
-.PHONY: measure-all measure-report clean sim-video sim-int sim-boot $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report) minig-coremode
+.PHONY: measure-all measure-report clean sim-video sim-int sim-boot sim-modes $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report) minig-coremode
 
 define board
 SRC_$(1) := $$(shell sed -n 's/^[a-z]* work "\(.*\)"/\1/p' karabas_$(1).prj)
@@ -78,6 +79,8 @@ sim-int:
 	sim/run_p4096_sim.sh int
 sim-boot:
 	sim/run_p4096_sim.sh boot 60
+sim-modes:
+	sim/run_p4096_sim.sh modes
 
 p4096_measure.ngc: measure/p4096_measure.xst measure/p4096_measure.prj $(call prj_src,measure/p4096_measure.prj)
 	mkdir -p xst_measure/projnav.tmp

@@ -26,7 +26,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112002",
+            "build": "26112003",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -87,6 +87,14 @@
             "type": "-"
         },
         {
+            "type": "M",
+            "name": "Video",
+            "open": 1
+        },
+        {
+            "type": "-"
+        },
+        {
             "type": "T",
             "name": "Magic",
             "index": 1,
@@ -101,6 +109,86 @@
             "options": null,
             "default": 0,
             "hotkey": "F12"
+        },
+        {
+            "type": "S",
+            "name": "512 Ink",
+            "index": 6,
+            "options": [
+                "Black",
+                "Blue",
+                "Red",
+                "Magenta",
+                "Green",
+                "Cyan",
+                "Yellow",
+                "White",
+                "Br Black",
+                "Br Blue",
+                "Br Red",
+                "Br Magenta",
+                "Br Green",
+                "Br Cyan",
+                "Br Yellow",
+                "Br White"
+            ],
+            "default": 7,
+            "page": 1
+        },
+        {
+            "type": "S",
+            "name": "512 mode",
+            "index": 7,
+            "options": [
+                "Mono",
+                "Colour"
+            ],
+            "default": 0,
+            "page": 1
+        },
+        {
+            "type": "S",
+            "name": "FlashColor",
+            "index": 8,
+            "options": [
+                "Off",
+                "On"
+            ],
+            "default": 0,
+            "page": 1
+        },
+        {
+            "type": "S",
+            "name": "GigaScreen",
+            "index": 9,
+            "options": [
+                "Off",
+                "On"
+            ],
+            "default": 0,
+            "page": 1
+        },
+        {
+            "type": "S",
+            "name": "Palette",
+            "index": 10,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 1
+        },
+        {
+            "type": "S",
+            "name": "Output",
+            "index": 11,
+            "options": [
+                "720x576",
+                "768x608"
+            ],
+            "default": 0,
+            "page": 1
         }
     ]
 }
