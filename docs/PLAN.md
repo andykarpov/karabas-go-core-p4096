@@ -173,7 +173,7 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 
 ### Ф4 — накопители, звук, периферия (ветка f4-io)
 
-ВГ93 (TRD / SCL, турбо), Nemo IDE (HDD Master / Slave, DNA-OS, iS-DOS), CMOS Gluk, SoundDrive / Covox, TurboSound (FM — по Ф0), GS (по Ф0), Kempston mouse, RS-232 через AY → MCU.
+ВГ93 (TRD / SCL, турбо), Nemo IDE (HDD Master / Slave, DNA-OS, iS-DOS) — два способа (пользователь 2026-11-20): CF-карта платы напрямую (шина WA / WD / WCS_N платы, как IDE-устройство) и образы HDD на SD1 через прошивку (`hdf_ata` + `img_sdc` modules); выбор для Master и Slave в OSD (Off / CF / образ), CMOS Gluk, SoundDrive / Covox, TurboSound (FM — по Ф0), GS (по Ф0), Kempston mouse, RS-232 через AY → MCU.
 Цель: TR-DOS с образов, загрузка с HDD, часы в Gluk, музыка GS / SoundDrive, мышь.
 
 ### Ф5 — OPL4 / ZXM-MoonSound (ветка f5-opl4; добавлено по просьбе пользователя 2026-11-20, «ближе к концу»)
@@ -191,7 +191,7 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 - Ф1: Turbo (Off / 7 / 14 MHz), INT (Pentagon / Pent -2T / Firm / Firm -2T), Joystick L / R, Magic (F11), Reset (F12).
 - Ф2: 512 Ink (цвет и яркость), 512 Colour, FlashColor, GigaScreen auto, Palette (On / Off, как XJ1-XJ3 TopBoard), Video out (по Ф0).
 - Ф3: Memory (схемы 0-6 #FC37), 7FFD D5 (Lock / Ext), +3 mode, Multitask, ROM emu (страницы #FD37), Reset to (Gluk / Menu-128 / TR-DOS / TR-DOS keep / BASIC 48 / HDD), Boot (Direct / BIOS).
-- Ф4: FDD A-D (образы), HDD Master / Slave (образы), GS, TurboSound / FM, SoundDrive, Mouse.
+- Ф4: FDD A-D (образы), HDD Master / Slave (Off / CF / образ на SD1 + выбор образа), GS, TurboSound / FM, SoundDrive, Mouse.
 - Ф5: OPL4 (On / Off).
 
 ## Открытые вопросы
