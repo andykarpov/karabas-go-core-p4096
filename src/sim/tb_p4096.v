@@ -49,6 +49,9 @@ p4096 dut (
 	.turbo(turbo), .turbo14_wait($test$plusargs("waitp")), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
 	.kbd_a(kbd_a), .kbd_d(kbd_d), .joy(5'b00000), .tape_in(1'b0), .mouse_en(1'b1), .ms_x(8'h12), .ms_y(8'h34), .ms_z(4'h0), .ms_b(3'b000), .sd_en(1'b1),
 	.rtc_a(), .rtc_di(), .rtc_wr(), .rtc_do(8'h00),
+	.fdd_wp(4'd0), .fdd_img_mounted(fdd_mnt), .fdd_img_size(fdd_size), .fdd_sdc_rd(fdd_rd), .fdd_sdc_wr(fdd_wr),
+	.fdd_sdc_sector(fdd_sector), .fdd_sdc_busy(fdd_busy), .fdd_sdc_done(fdd_done), .fdd_sdc_byte_addr(fdd_baddr),
+	.fdd_sdc_byte_in_strobe(fdd_bstb), .fdd_sdc_byte_in_data(fdd_bdata), .fdd_sdc_byte_out_data(fdd_bout), .fdd_active(),
 	.ide_a(), .ide_cs_n(), .ide_rd_n(), .ide_wr_n(), .ide_dout(), .ide_din(16'hFFFF), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_wr(rom_wr), .rom_din(rom_din), .rom_q(rom_q), .rom_done(rom_done),
@@ -56,6 +59,40 @@ p4096 dut (
 	.audio_l(audio_l), .audio_r(audio_r),
 	.cpu_a(cpu_a), .cpu_dout(cpu_dout), .cpu_m1_n(cpu_m1_n), .int_n_o(int_n)
 );
+
+// +trd=FILE: a disk image in drive A, served as the file mounter of the mcu does (slot 0: busy, 512 bytes with
+// strobes, done)
+reg [7:0] trd [0:655359];
+reg [3:0] fdd_mnt = 4'd0;
+reg [63:0] fdd_size = 64'd0;
+wire [3:0] fdd_rd, fdd_wr;
+wire [31:0] fdd_sector;
+wire [7:0] fdd_bout;
+reg fdd_busy = 1'b0, fdd_done = 1'b0, fdd_bstb = 1'b0;
+reg [8:0] fdd_baddr = 9'd0;
+reg [7:0] fdd_bdata = 8'd0;
+integer fdd_st = 0, fdd_n = 0, fdd_wcnt = 0;
+reg [31:0] fdd_lba = 32'd0;
+reg fdd_isw = 1'b0;
+always @(posedge clk) begin
+	fdd_done <= 1'b0;
+	fdd_bstb <= 1'b0;
+	case (fdd_st)
+		0: if (fdd_rd[0] || fdd_wr[0]) begin fdd_busy <= 1'b1; fdd_lba <= fdd_sector; fdd_isw <= fdd_wr[0]; fdd_n <= 0; fdd_st <= 1; fdd_wcnt <= 0; end
+		1: if (!fdd_rd[0] && !fdd_wr[0]) begin fdd_wcnt <= fdd_wcnt + 1; if (fdd_wcnt == 200) fdd_st <= 2; end
+		2: begin
+			if (fdd_n == 512) begin fdd_st <= 3; end
+			else if (fdd_wcnt[1:0] == 2'd0) begin
+				fdd_baddr <= fdd_n;
+				if (!fdd_isw) begin fdd_bdata <= trd[fdd_lba * 512 + fdd_n]; fdd_bstb <= 1'b1; end
+				fdd_n <= fdd_n + 1;
+			end
+			if (fdd_isw && fdd_wcnt[1:0] == 2'd3 && fdd_n > 0) trd[fdd_lba * 512 + fdd_n - 1] <= fdd_bout;
+			fdd_wcnt <= fdd_wcnt + 1;
+		end
+		3: begin fdd_busy <= 1'b0; fdd_done <= 1'b1; fdd_st <= 0; end
+	endcase
+end
 
 // RAM: the byte of a read in the next clock (the input register of the top); a write in its first clock
 always @(posedge clk) begin
@@ -141,6 +178,12 @@ initial begin
 	if ($value$plusargs("rom=%s", fname)) $readmemh(fname, rom);
 	if ($value$plusargs("ram=%s", fname)) $readmemh(fname, ram);
 	if ($value$plusargs("log=%s", fname)) fl = $fopen(fname, "w");
+	if ($value$plusargs("trd=%s", fname)) begin
+		$readmemh(fname, trd);
+		fdd_size = 64'd655360;
+		@(posedge clk) fdd_mnt = 4'b0001;
+		@(posedge clk) fdd_mnt = 4'b0000;
+	end
 	repeat (20) @(posedge clk);
 	if (!hold) reset = 1'b0;
 	wait (nframe == frames + 1);

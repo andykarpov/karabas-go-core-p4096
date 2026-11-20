@@ -59,6 +59,20 @@ module p4096 (
 	output wire        ide_wr_n,
 	output wire [15:0] ide_dout,
 	input  wire [15:0] ide_din,
+	// floppy images (slots 0-3 of kg_mcu2): p4096_fdd.v
+	input  wire [3:0]  fdd_wp,
+	input  wire [3:0]  fdd_img_mounted,
+	input  wire [63:0] fdd_img_size,
+	output wire [3:0]  fdd_sdc_rd,
+	output wire [3:0]  fdd_sdc_wr,
+	output wire [31:0] fdd_sdc_sector,
+	input  wire        fdd_sdc_busy,
+	input  wire        fdd_sdc_done,
+	input  wire [8:0]  fdd_sdc_byte_addr,
+	input  wire        fdd_sdc_byte_in_strobe,
+	input  wire [7:0]  fdd_sdc_byte_in_data,
+	output wire [7:0]  fdd_sdc_byte_out_data,
+	output wire        fdd_active,
 	output reg  [7:0]  rtc_a = 8'd0,
 	output wire [7:0]  rtc_di,
 	output wire        rtc_wr,
@@ -189,13 +203,17 @@ wire p_fe_w = !a[0] && a[2] && a[6];
 wire p_ide = !a[1] && !a[2] && !dos;
 wire p_fe_r = !a[0] && !p_ide;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
-wire p_ff = a[7:0] == 8'hFF && !dos;
+// IODOS: the TR-DOS ports open: T_DOS or #EFF7 D7 (README: "открытие скрытых портов RTC и FDC")
+wire iodos = dos || eff7[7];
+wire p_ff = a[7:0] == 8'hFF && !iodos;
+// VG93 and its system port (DD27, DD132, DD131; ош. 1: A2 = A3 = 1): A0-A3 = 1, IODOS
+wire p_vg = a[0] && a[1] && a[2] && a[3] && iodos;
 // #xxF7 (DD90): A3 = 0, A2 = 1, A6 = 1; A14 A13 A12 = 110: #EFF7
 wire p_eff7 = !a[3] && a[2] && a[6] && a[14:12] == 3'b110;
 // BIOS ports #FC37-#FF37 (DD60), write only: A3 = A6 = A7 = 0, A2 = 1, A10 = 1; A9 A8 select
 wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
-wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
+wire p_kj = !a[5] && !a[7] && a[3] && !iodos;   // #FE (A0 = 0) has the priority in cpu_di
 // CMOS (DD90 as #EFF7): #BFF7 (A14 A13 A12 = 011) data, #DFF7 (101) address; open with #EFF7 D7 (README)
 wire p_rtcd = !a[3] && a[2] && a[6] && a[14:12] == 3'b011 && eff7[7];
 wire p_rtca = !a[3] && a[2] && a[6] && a[14:12] == 3'b101 && eff7[7];
@@ -296,6 +314,17 @@ always @(posedge clk) begin
 	if (iowr_s && p_ide && a[0]) ide_hi <= cpu_do;
 	else if (!ide_rd_n) ide_hi <= ide_din[15:8];     // the last clock of the strobe stays
 end
+
+// ---------------- floppy (p4096_fdd.v) ----------------
+wire [7:0] fdd_do;
+p4096_fdd fdd (
+	.clk(clk), .reset(reset),
+	.sel(io && p_vg), .rd(!rd_n), .wr(!wr_n), .a(a[7:0]), .din(cpu_do), .dout(fdd_do), .wp(fdd_wp),
+	.img_mounted(fdd_img_mounted), .img_size(fdd_img_size),
+	.sdc_rd(fdd_sdc_rd), .sdc_wr(fdd_sdc_wr), .sdc_sector(fdd_sdc_sector), .sdc_busy(fdd_sdc_busy),
+	.sdc_done(fdd_sdc_done), .sdc_byte_addr(fdd_sdc_byte_addr), .sdc_byte_in_strobe(fdd_sdc_byte_in_strobe),
+	.sdc_byte_in_data(fdd_sdc_byte_in_data), .sdc_byte_out_data(fdd_sdc_byte_out_data), .active(fdd_active)
+);
 
 assign rtc_di = cpu_do;
 assign rtc_wr = iowr_s && p_rtcd;
@@ -584,6 +613,8 @@ always @(*) begin
 			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
+		else if (p_vg)
+			cpu_di = fdd_do;
 		else if (p_ide)
 			cpu_di = a[0] ? ide_hi : ide_din[7:0];
 		else if (p_rtcd)

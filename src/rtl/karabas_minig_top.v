@@ -190,6 +190,13 @@ wire [31:0] sdc_sector;
 wire sdc_busy, sdc_done, sdc_error, sdc_byte_in_strobe;
 wire [2:0] sdc_slot;
 wire [8:0] sdc_byte_addr;
+wire [7:0] img_wp;
+// floppies A-D (p4096_fdd in the machine): slots 0-3
+wire [3:0] fdd_rd, fdd_wr;
+wire [31:0] fdd_sector;
+wire [7:0] fdd_out_data;
+wire fdd_active;
+wire fdd_own = !sdc_slot[2];
 wire [7:0] ms_x, ms_y, mcu_ms_z, mcu_ms_b;
 wire mcu_ms_wr;
 wire [7:0] rtc_a, rtc_di, rtc_do;
@@ -308,7 +315,7 @@ kg_mcu2 #(
 	.SDC_BYTE_ADDR	(sdc_byte_addr),
 	.SDC_BYTE_IN_DATA(sdc_byte_in_data),
 	.SDC_BYTE_OUT_DATA(sdc_byte_out_data),
-	.IMG_WP			(),
+	.IMG_WP			(img_wp),
 	.IMG_PHYS_WR	(),
 	.IMG_PHYS		(),
 	.IMG_FLUSH		(),
@@ -516,6 +523,19 @@ p4096 p4096 (
 	.ms_z				(cursor_z),
 	.ms_b				(cursor_b),
 	.sd_en			(!sw_sd_off),
+	.fdd_wp			(img_wp[3:0]),
+	.fdd_img_mounted(sdc_img_mounted[3:0]),
+	.fdd_img_size	(sdc_img_size),
+	.fdd_sdc_rd		(fdd_rd),
+	.fdd_sdc_wr		(fdd_wr),
+	.fdd_sdc_sector(fdd_sector),
+	.fdd_sdc_busy	(sdc_busy && fdd_own),
+	.fdd_sdc_done	(sdc_done && fdd_own),
+	.fdd_sdc_byte_addr(sdc_byte_addr),
+	.fdd_sdc_byte_in_strobe(sdc_byte_in_strobe && fdd_own),
+	.fdd_sdc_byte_in_data(sdc_byte_in_data),
+	.fdd_sdc_byte_out_data(fdd_out_data),
+	.fdd_active		(fdd_active),
 	.ide_a			(ide_a),
 	.ide_cs_n		(ide_cs_n),
 	.ide_rd_n		(ide_rd_n),
@@ -570,10 +590,11 @@ assign WWR_N = ide_wr_n || !cf_sel;
 assign WRESET_N = !machine_reset;
 assign WD = (!ide_wr_n && cf_sel) ? ide_dout : 16'hZZZZ;
 assign ide_din = (cf_sel && !hdf_dev) ? WD : hdf_dout;
-assign sdc_rd = {2'b00, hdf_rd, 4'b0000};
-assign sdc_wr = {2'b00, hdf_wr, 4'b0000};
-assign sdc_sector = hdf_sector;
-assign sdc_byte_out_data = hdf_out_data;
+// one request at a time, the lowest slot first (img_sdc): the floppies (0-3) before the hard disks (4, 5)
+assign sdc_rd = {2'b00, hdf_rd, fdd_rd};
+assign sdc_wr = {2'b00, hdf_wr, fdd_wr};
+assign sdc_sector = (fdd_rd != 4'd0 || fdd_wr != 4'd0) ? fdd_sector : hdf_sector;
+assign sdc_byte_out_data = fdd_own ? fdd_out_data : hdf_out_data;
 hdf_ata #(.ENABLE_RDB(0)) hdf_ata(.clk(clk_bus), .reset(areset), .ata_reset(machine_reset), .dev0_en(sw_hdd_image),
 	.dev(hdf_dev), .dev1_here(hdf_dev1_here), .a(ide_a), .cs_n(ide_cs_n), .rd_n(ide_rd_n), .wr_n(ide_wr_n),
 	.din(ide_dout), .dout(hdf_dout), .img_mounted(sdc_img_mounted[5:4]), .img_size(sdc_img_size),

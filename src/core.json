@@ -34,7 +34,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112010",
+            "build": "26112011",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -317,6 +317,40 @@
             ],
             "default": 0,
             "page": 3
+        },
+        {
+            "type": "F",
+            "name": "Disk A",
+            "slot": 0,
+            "extensions": ".trd",
+            "page": 4,
+            "hotkey": "Menu+F5"
+        },
+        {
+            "type": "F",
+            "name": "Disk B",
+            "slot": 1,
+            "extensions": ".trd",
+            "page": 4,
+            "hotkey": "Menu+F6"
+        },
+        {
+            "type": "F",
+            "name": "Disk C",
+            "slot": 2,
+            "extensions": ".trd",
+            "page": 4
+        },
+        {
+            "type": "F",
+            "name": "Disk D",
+            "slot": 3,
+            "extensions": ".trd",
+            "page": 4
+        },
+        {
+            "type": "-",
+            "page": 4
         },
         {
             "type": "S",
