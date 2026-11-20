@@ -194,6 +194,9 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 
 Мышь (Kempston mouse) и General Sound остаются в Ф4. Здесь — OPL4 как в core-baseconf (`opl4_kg`, FM + волновой синтез, порты #C4-#C7 MoonSound, ПЗУ YRW801 из пункта FL `core.json`, память сэмплов в SDRAM — порт 2 `baseconf_storage`, общий с GS) и его звук в микшере; IRQ таймера FM — на /INT вне TR-DOS, как baseconf. Сначала замер XST (вместе с GS), пункт OSD (On / Off).
 Цель: MoonBlaster / демо под MoonSound играют, GS и OPL4 вместе.
+- Состояние 2026-11-20 (сборка 26112019, 87 % LUT, 99 % слайсов, 41 RAMB16, тайминг выполнен): `opl4_kg` на clk_sys, порты #C4-#C7 / #7E-#7F не в TR-DOS, SEL OPL4 в приоритете над #FE (запись и чтение; иначе мигал бордюр — у #C4 / #C6 / #7E A0 = 0, замечание пользователя), IRQ таймера FM — на /INT вне TR-DOS, ПЗУ YRW801 — пункт FL «OPL4 ROM» в слоте 6 (слоты 0-5 заняты образами дисков, слоты F и FL общие), OSD Sound: OPL4 On / Off, OPL4 Interp, OPL4 ROM.
+- Плата: память сэмплов читается через регистры 3-6 OPL4 байт в байт с yrw801.rom (нужен NEW2: FM 105h = 3); Moonsound 2 (диск Mick Labs с SD2, запуск в ZYX Boot клавишей A) играет, бордюр стоит; OPL4 Off — тишина.
+- Места почти нет (99 % слайсов): DivMMC из беклога — после замера.
 
 ### Ф6 — Go / Mini и релиз (ветка f6-release)
 
