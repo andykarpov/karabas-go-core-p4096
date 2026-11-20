@@ -179,6 +179,16 @@ OSD задаёт значения портов BIOS при сбросе, зап�
 ВГ93 (TRD / SCL, турбо), Nemo IDE (HDD Master / Slave, DNA-OS, iS-DOS) — два способа (пользователь 2026-11-20): CF-карта платы напрямую (шина WA / WD / WCS_N платы, как IDE-устройство) и образы HDD на SD1 через прошивку (`hdf_ata` + `img_sdc` modules); выбор для Master и Slave в OSD (Off / CF / образ), CMOS Gluk, SoundDrive / Covox, TurboSound (FM — по Ф0), GS (по Ф0), Kempston mouse, RS-232 через AY → MCU.
 Цель: TR-DOS с образов, загрузка с HDD, часы в Gluk, музыка GS / SoundDrive, мышь.
 
+Сделано (2026-11-20, ветка f4-io):
+- 4.1 CMOS Gluk (#BFF7 / #DFF7, открываются #EFF7 D7) на часах `kg_mcu2` (`rtc_mode` 0, MC146818: 64 адреса), Kempston mouse (#FADF / #FBDF / #FFDF через `kg_cursor`, колесо в D7-D4 от F в покое), SoundDrive 1.05 / Covox (#0F / #1F / #4F / #5F, #FB; порты по стандарту, чек DD11 TopBoard).
+- 4.2 Nemo IDE (A1 = A2 = 0, не TR-DOS, #11 — старший байт): CF-карта платы (устройство 0 при HDD Master = CF card) и `hdf_ata` на образах HDF0 / HDF1 SD1 (слоты 4 / 5).
+- 4.3 ВГ93: `wd1793` MiSTer (через core-orionpro) на образах TRD дисководов A-D (слоты 0-3), мост `sd_*` ↔ `sdc_*` без кэша (5-15 мс на сектор); порты TR-DOS только при T_DOS (`#EFF7 D7` открывает только часы — HW.md).
+- 4.4 General Sound (`gs.v`, порт 2 хранилища, `gs105b.rom` с 80000000), звук: машина / 2 + GS с насыщением.
+- Симуляция: `run_p4096_sim.sh fdd` (вход в TR-DOS через 3D2F, Restore, чтение секторов TRD на 3,5 / 7 / 14 МГц), модель часов и журнал портов в тестбенче.
+- Плата (26112011-26112014): TR-DOS 5.03 — каталог образа и запуск демо Tiratok с диска A (музыка AY есть); BIOS v4.2: CMOS MC146818, General Sound 2016K, жёсткий диск Master = CF-карта 978 МБ, порт атрибутов на 3,5 / 7 МГц (на 14 МГц тест BIOS его не находит: опрос в 2560 чтений короче четверти кадра — бумага позже, ядро ни при чём, чек), мышь — исправлено в 26112015 (BIOS видел три равных байта 7F).
+- Gluk Reset Service: «NO CMOS», пока в ячейке CMOS 11h не AA (его настройка часов) — не ошибка ядра (HW.md).
+- Не сделано: RS-232 через порт AY, ускорение дисков (копия образа в SDRAM).
+
 ### Ф5 — OPL4 / ZXM-MoonSound (ветка f5-opl4; добавлено по просьбе пользователя 2026-11-20, «ближе к концу»)
 
 Мышь (Kempston mouse) и General Sound остаются в Ф4. Здесь — OPL4 как в core-baseconf (`opl4_kg`, FM + волновой синтез, порты #C4-#C7 MoonSound, ПЗУ YRW801 из пункта FL `core.json`, память сэмплов в SDRAM — порт 2 `baseconf_storage`, общий с GS) и его звук в микшере; IRQ таймера FM — на /INT вне TR-DOS, как baseconf. Сначала замер XST (вместе с GS), пункт OSD (On / Off).
