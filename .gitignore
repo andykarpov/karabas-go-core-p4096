@@ -8,3 +8,4 @@ src/p4096_measure_xst.xrpt
 src/measure/xst_*.log
 src/tools/__pycache__/
 src/sim/build/
+src/sim/__pycache__/

@@ -4,6 +4,10 @@
     p4096_frame.py hex IN OUT [SIZE]        binary -> one hex byte a line ($readmemh), padded with FF to SIZE
     p4096_frame.py ram OUT SEED             a RAM of 128 KB: random pages 5 / 7 (readable attributes), else 0
     p4096_frame.py png DUMP OUT             a dump of tb_p4096 (304 lines x 768 dots) -> PNG (lines doubled)
+    p4096_frame.py cmpshot DUMP PNG         the dump against a frame of unreal-ng (352 x 288, paper at 48, 48):
+                                            colours as classes (black, red, cyan, paper), exit 1 on a difference
+    p4096_frame.py intset DIR               int_P.txt / unreal_int_P.png, P = 0..3: the sets of the first stripe
+                                            points must be equal (exit 1 else)
     p4096_frame.py cmp DUMP RAMHEX [scr7]   the dump against p4096_vmodel.render() of the same RAM (border 0,
                                             FLASH off): exit 1 on any difference
 """
@@ -75,6 +79,79 @@ def compare(dump, ramhex, scr7=False):
     return 1 if bad else 0
 
 
+def cls(c):
+    r, g, b = c
+    if max(c) < 40:
+        return 'k'
+    if r > 100 and g < 60 and b < 60:
+        return 'r'
+    if r < 60 and g > 100 and b > 100:
+        return 'c'
+    if r > 100 and g > 100 and b > 100:
+        return 'w'
+    return '?'
+
+
+def compare_shot(dump, png):
+    from PIL import Image
+    rows = read_dump(dump)
+    im = Image.open(png).convert('RGB')
+    assert im.size == (352, 288), im.size
+    bad = 0
+    first = None
+    for y in range(288):
+        for x in range(352):
+            v = rows[y + 16][2 * (x + 16)]
+            ours = cls((((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17))
+            ref = cls(im.getpixel((x, y)))
+            if ours != ref:
+                if bad < 10:
+                    print('diff y %d x %d: rtl %s unreal %s' % (y, x, ours, ref))
+                bad += 1
+    # where the stripes begin in both (first non-black point in the top border, in points of the window)
+    def first_stripe(get):
+        for y in range(48):
+            for x in range(352):
+                if get(x, y) in 'rc':
+                    return y, x
+    def ours_get(x, y):
+        v = rows[y + 16][2 * (x + 16)]
+        return cls((((v >> 8) & 15) * 17, ((v >> 4) & 15) * 17, (v & 15) * 17))
+    print('first stripe point (line, x of the 352 x 288 window): rtl', first_stripe(ours_get),
+          'unreal', first_stripe(lambda x, y: cls(im.getpixel((x, y)))))
+    # the colour changes on the first stripe line: x of each change, both
+    fy = first_stripe(ours_get)
+    if fy:
+        y = fy[0]
+        for name, get in (('rtl', ours_get), ('unreal', lambda x, y: cls(im.getpixel((x, y))))):
+            row = [get(x, y) for x in range(352)]
+            print(name, 'changes on line', y, [x for x in range(1, 352) if row[x] != row[x - 1]][:12])
+    print('cmpshot: %d differences' % bad)
+    return 1 if bad else 0
+
+
+def int_set(d):
+    from PIL import Image
+
+    def first(get):
+        for y in range(60):
+            for x in range(352):
+                if get(x, y) in 'rc':
+                    return y * 448 + x
+    rs, us = [], []
+    for p in range(4):
+        rows = read_dump(os.path.join(d, 'int_%d.txt' % p))
+        im = Image.open(os.path.join(d, 'unreal_int_%d.png' % p)).convert('RGB')
+        rs.append(first(lambda x, y: cls(tuple(((rows[y + 16][2 * (x + 16)] >> s) & 15) * 17 for s in (8, 4, 0)))))
+        us.append(first(lambda x, y: cls(im.getpixel((x, y)))))
+    # a stripe that begins in the blank part of a line shows first on the next one: only the earliest counts
+    key = lambda v: sorted(v)
+    print('first stripe (line * 448 + x): rtl', rs, 'unreal', us)
+    ok = key(rs) == key(us)
+    print('intset:', 'same' if ok else 'DIFFERENT')
+    return 0 if ok else 1
+
+
 if __name__ == '__main__':
     a = sys.argv
     if len(a) >= 4 and a[1] == 'hex':
@@ -83,6 +160,10 @@ if __name__ == '__main__':
         make_ram(a[2], int(a[3]))
     elif len(a) == 4 and a[1] == 'png':
         to_png(a[2], a[3])
+    elif len(a) == 3 and a[1] == 'intset':
+        sys.exit(int_set(a[2]))
+    elif len(a) == 4 and a[1] == 'cmpshot':
+        sys.exit(compare_shot(a[2], a[3]))
     elif len(a) >= 4 and a[1] == 'cmp':
         sys.exit(compare(a[2], a[3], len(a) > 4 and a[4] == 'scr7'))
     else:

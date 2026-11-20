@@ -90,7 +90,8 @@ end
 // log: INT starts and OUTs, in T-states of 3.5 MHz from the start
 integer clocks = 0, nwr = 0;
 reg [15:0] last_pc = 16'd0;
-integer trace_n = 0;
+integer trace_n = 0, int_clk = 0, halt_clk = 0;
+reg inta_d = 1'b0;
 reg int_n_d = 1'b1;
 always @(posedge clk) begin
 	clocks = clocks + 1;
@@ -103,6 +104,10 @@ always @(posedge clk) begin
 		last_pc = dut.a;
 	end
 	if (mem_wr) nwr = nwr + 1;
+	if (int_n_d && !int_n) int_clk = clocks;
+	if (fl != 0 && !dut.m1_n && !dut.iorq_n && !inta_d)
+		$fwrite(fl, "INTA %0d clocks after INT, halt start phase %0d\n", clocks - int_clk, (halt_clk - int_clk) % 32);
+	inta_d = !dut.m1_n && !dut.iorq_n;
 	if (fl != 0 && int_n_d && !int_n)
 		$fwrite(fl, "INT clk %0d v %0d pc %04x writes %0d p7ffd %02x\n", clocks, dut.v, last_pc, nwr,
 			{dut.p7_d7, dut.p7_d6, dut.p7_d5, dut.spage0, dut.scr, dut.p7_page});

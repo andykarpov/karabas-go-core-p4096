@@ -250,20 +250,24 @@ assign wait_n = !(rom_req && !rom_done) && !ram_wait && !ram_wait_wr;
 wire [7:0] ram_q = rd_cpu_q ? mem_q : cpu_q;
 
 // ---------------- INT ----------------
-// Pentagon-128 as Unreal Speccy: 71680 T a frame, INT 17988 T before the first point of the paper (v = 0,
-// h = 32), 32 T long. The line begins at h = 16, so INT begins at v = 239, h = 15, px = 0 (the last cell of the
-// right border); Firm +16 lines +48 T: v = 256, h = 27; XJ3: 2 T (4 points) earlier.
+// Pentagon-128 as unreal-ng (configs/pentagon128k: intstart 71635, "17988 T to paper", checked there on Across
+// the Edge): 71680 T a frame, 32 T long. A line begins at h = 16 (T 0 of the line = h 16, px 0), the paper at
+// v = 0, T 64. Matched to unreal-ng by src/sim/run_p4096_sim.sh int (the border stripes of int_test.asm at the
+// same points): INT begins at v = 239, T 220 (h = 15, px 0). Firm: +48 T and 16 lines (v = 255 + 48 T = v 256,
+// T 44); XJ3: 2 T earlier.
 wire [8:0] int_v = int_firm ? 9'd256 : 9'd239;
-wire [5:0] int_h0 = int_firm ? 6'd27 : 6'd15;
-wire [5:0] int_h = int_xj3 ? int_h0 - 6'd1 : int_h0;
-wire [2:0] int_px = int_xj3 ? 3'd4 : 3'd0;
+wire [7:0] int_t0 = int_firm ? 8'd44 : 8'd220;
+wire [7:0] int_t = int_xj3 ? int_t0 - 8'd2 : int_t0;
+wire [5:0] hrel = (h >= 6'd16) ? h - 6'd16 : h + 6'd40;
+wire [7:0] line_t = {hrel, px[2:1]};        // the T of the line (0..223)
+wire int_go = (v == int_v) && (line_t == int_t) && !px[0] && (ph == 2'd0);
 reg [7:0] int_cnt = 8'd0;     // 32 T = 256 clocks
 always @(posedge clk) begin
-	if (v == int_v && h == int_h && px == int_px && ph == 2'd0)
+	if (int_go)
 		int_cnt <= 8'd255;
 	else if (int_cnt != 8'd0)
 		int_cnt <= int_cnt - 8'd1;
-	int_n <= !(int_cnt != 8'd0 || (v == int_v && h == int_h && px == int_px && ph == 2'd0));
+	int_n <= !(int_cnt != 8'd0 || int_go);
 end
 
 // ---------------- AY / TurboSound ----------------
