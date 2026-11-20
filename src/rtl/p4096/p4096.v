@@ -254,7 +254,7 @@ always @(posedge clk) begin
 		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
 	end else if (iowr_s) begin
 		if (p_eff7) eff7 <= cpu_do;
-		if (p_rtca) rtc_a <= cpu_do;
+		if (p_rtca) rtc_a <= {2'b00, cpu_do[5:0]};   // MC146818: 64 addresses (14 + 50 bytes), A7 A6 not decoded
 		if (!dos && sd_en)
 			case (a[7:0])
 				8'h0F: sd_a <= cpu_do;
