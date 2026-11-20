@@ -105,6 +105,7 @@ module p4096 (
 	// sound: signed, the sum of AY / TS, beeper and tape
 	output reg  [15:0] audio_l = 16'd0,
 	output reg  [15:0] audio_r = 16'd0,
+	output wire        midi_tx,       // MIDI out: AY port A bit 2 (the 128K ROM sends MIDI there)
 
 	// debug / sim
 	output wire [15:0] cpu_a,
@@ -607,7 +608,7 @@ turbosound ts (
 	.BDIR(ay_sel && !wr_n), .BC(ay_sel && a[14]), .DI(cpu_do), .DO(ay_do), .AY_MODE(1'b0),
 	.SSG0_AUDIO_A(s0a), .SSG0_AUDIO_B(s0b), .SSG0_AUDIO_C(s0c),
 	.SSG1_AUDIO_A(s1a), .SSG1_AUDIO_B(s1b), .SSG1_AUDIO_C(s1c),
-	.MIDI_TX()
+	.MIDI_TX(midi_tx)
 );
 
 // ---------------- CPU data in ----------------

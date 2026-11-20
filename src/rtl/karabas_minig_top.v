@@ -133,10 +133,6 @@ assign SD_CS_N = 1'b1;
 assign SD_CLK = 1'b0;
 assign SD_DI = 1'bz;
 assign SD_DO = 1'bz;
-assign ADC_CLK = 1'b0;
-assign ADC_BCK = 1'bz;
-assign ADC_LRCK = 1'bz;
-assign MIDI_TX = 1'b1;
 
 // ---------- clocks: VCO 50 * 37 / 2 = 925 MHz: clk_sys /11 84.09, clk_8 /116 7.97, clk_bus /33 28.03, /77 12.01
 wire clk_sys, clk_8mhz, clk_bus, clk_bus_pll;
@@ -590,6 +586,7 @@ p4096 p4096 (
 	.line_start		(line_start),
 	.audio_l			(audio_l),
 	.audio_r			(audio_r),
+	.midi_tx			(MIDI_TX),
 	.cpu_a			(cpu_a),
 	.cpu_dout		(cpu_dout),
 	.cpu_iorq_n		(cpu_iorq_n),
@@ -731,14 +728,38 @@ kg_hdmi_ft #(.CLKRATE(28030303), .REF_MHZ(8'd28), .SAMPLERATE(48000), .OUTPUT_RE
 	.freq				(hdmi_freq)
 );
 
-// ---------- the mix: the machine at half + General Sound (15 bits signed), saturated ----------
+// ---------- ADC (PCM1808, as core-zxuno / core-baseconf): the MIDI synth of the board and the line in ----------
+wire signed [23:0] adc_l, adc_r;
+i2s_transceiver adc(
+	.reset_n			(~areset),
+	.mclk				(clk_bus),
+	.sclk				(ADC_BCK),
+	.ws				(ADC_LRCK),
+	.sd_tx			(),
+	.sd_rx			(ADC_DOUT),
+	.l_data_tx		(24'b0),
+	.r_data_tx		(24'b0),
+	.l_data_rx		(adc_l),
+	.r_data_rx		(adc_r)
+);
+ODDR2 oddr_adc(.Q(ADC_CLK), .C0(clk_bus), .C1(~clk_bus), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
+// half of the ADC scale (as core-zxuno), taken into clk_bus registers
+reg signed [15:0] adc_mix_l = 16'sd0, adc_mix_r = 16'sd0;
+always @(posedge clk_bus) begin
+	adc_mix_l <= {adc_l[23], adc_l[23:9]};
+	adc_mix_r <= {adc_r[23], adc_r[23:9]};
+end
+
+// ---------- the mix: the machine at half + General Sound (15 bits signed) + ADC, saturated ----------
 function [15:0] sat16(input signed [17:0] x);
 	sat16 = (x > 18'sd32767) ? 16'h7FFF : (x < -18'sd32768) ? 16'h8000 : x[15:0];
 endfunction
 reg [15:0] mix_l_r = 16'd0, mix_r_r = 16'd0;
 always @(posedge clk_bus) begin
-	mix_l_r <= sat16($signed({3'b000, audio_l[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_l[14]}}, gs_l})));
-	mix_r_r <= sat16($signed({3'b000, audio_r[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_r[14]}}, gs_r})));
+	mix_l_r <= sat16($signed({3'b000, audio_l[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_l[14]}}, gs_l})) +
+	                 $signed({{2{adc_mix_l[15]}}, adc_mix_l}));
+	mix_r_r <= sat16($signed({3'b000, audio_r[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_r[14]}}, gs_r})) +
+	                 $signed({{2{adc_mix_r[15]}}, adc_mix_r}));
 end
 assign mix_l = mix_l_r;
 assign mix_r = mix_r_r;
