@@ -42,6 +42,41 @@ module p4096 (
 	input  wire [4:0]  kbd_d,
 	input  wire [4:0]  joy,
 	input  wire        tape_in,
+	// Kempston mouse (#FADF buttons, #FBDF X, #FFDF Y): kg_cursor of the top; buttons {middle, right, left} high
+	input  wire        mouse_en,
+	input  wire [7:0]  ms_x,
+	input  wire [7:0]  ms_y,
+	input  wire [3:0]  ms_z,
+	input  wire [2:0]  ms_b,
+	// SoundDrive / Covox (OSD)
+	input  wire        sd_en,
+	// CMOS (Gluk: #DFF7 address, #BFF7 data, open with #EFF7 D7): the clock registers of kg_mcu2 (RTC_A -> RTC_DO a
+	// clock later; a write is RTC_CS and !RTC_WR_N for one clock)
+	// Nemo IDE (A1 = A2 = 0, not TR-DOS): the IDE bus (the top puts the CF card and hdf_ata on it)
+	output wire [2:0]  ide_a,
+	output wire [1:0]  ide_cs_n,
+	output wire        ide_rd_n,
+	output wire        ide_wr_n,
+	output wire [15:0] ide_dout,
+	input  wire [15:0] ide_din,
+	// floppy images (slots 0-3 of kg_mcu2): p4096_fdd.v
+	input  wire [3:0]  fdd_wp,
+	input  wire [3:0]  fdd_img_mounted,
+	input  wire [63:0] fdd_img_size,
+	output wire [3:0]  fdd_sdc_rd,
+	output wire [3:0]  fdd_sdc_wr,
+	output wire [31:0] fdd_sdc_sector,
+	input  wire        fdd_sdc_busy,
+	input  wire        fdd_sdc_done,
+	input  wire [8:0]  fdd_sdc_byte_addr,
+	input  wire        fdd_sdc_byte_in_strobe,
+	input  wire [7:0]  fdd_sdc_byte_in_data,
+	output wire [7:0]  fdd_sdc_byte_out_data,
+	output wire        fdd_active,
+	output reg  [7:0]  rtc_a = 8'd0,
+	output wire [7:0]  rtc_di,
+	output wire        rtc_wr,
+	input  wire [7:0]  rtc_do,
 	output reg         tape_out = 1'b0,
 
 	// RAM
@@ -70,12 +105,19 @@ module p4096 (
 	// sound: signed, the sum of AY / TS, beeper and tape
 	output reg  [15:0] audio_l = 16'd0,
 	output reg  [15:0] audio_r = 16'd0,
+	output wire        midi_tx,       // MIDI out: AY port A bit 2 (the 128K ROM sends MIDI there)
 
 	// debug / sim
 	output wire [15:0] cpu_a,
 	output wire [7:0]  cpu_dout,
 	output wire        cpu_m1_n,
-	output wire        int_n_o
+	output wire        cpu_iorq_n,
+	output wire        cpu_rd_n,
+	output wire        cpu_wr_n,
+	output wire        int_n_o,
+	// devices outside the machine on the CPU bus (General Sound of the top): their read data, the highest priority
+	input  wire        ext_oe,
+	input  wire [7:0]  ext_do
 );
 
 // ---------------- raster ----------------
@@ -125,6 +167,9 @@ reg int_n = 1'b1;
 assign cpu_a = a;
 assign cpu_dout = cpu_do;
 assign cpu_m1_n = m1_n;
+assign cpu_iorq_n = iorq_n;
+assign cpu_rd_n = rd_n;
+assign cpu_wr_n = wr_n;
 assign int_n_o = int_n;
 
 z80s_t80pa cpu (
@@ -164,17 +209,29 @@ wire p_fffd = p_fd && a[15:13] == 3'b111;
 wire p_bffd = p_fd && a[15:13] == 3'b101;
 // #FE / #F6 write: A0 = 0, A2 = 1, A6 = 1; read #FE: A0 = 0
 wire p_fe_w = !a[0] && a[2] && a[6];
-// Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard (until Ф4: no drive, FF)
+// Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard
 wire p_ide = !a[1] && !a[2] && !dos;
 wire p_fe_r = !a[0] && !p_ide;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
+// The TR-DOS ports follow T_DOS. #EFF7 D7 opens the clock (#BFF7 / #DFF7) only: BIOS v4.2 runs with #EFF7 = 82 and
+// finds Kempston and the attribute port #FF, which the gate of the TR-DOS ports (DD70:4 /IODOS) closes, so D7 is
+// not in /IODOS (README: "RTC и FDC", чек; docs/HW.md)
 wire p_ff = a[7:0] == 8'hFF && !dos;
+// VG93 and its system port (DD27, DD132, DD131; ош. 1: A2 = A3 = 1): A0-A3 = 1
+wire p_vg = a[0] && a[1] && a[2] && a[3] && dos;
 // #xxF7 (DD90): A3 = 0, A2 = 1, A6 = 1; A14 A13 A12 = 110: #EFF7
 wire p_eff7 = !a[3] && a[2] && a[6] && a[14:12] == 3'b110;
 // BIOS ports #FC37-#FF37 (DD60), write only: A3 = A6 = A7 = 0, A2 = 1, A10 = 1; A9 A8 select
 wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
 wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
+// CMOS (DD90 as #EFF7): #BFF7 (A14 A13 A12 = 011) data, #DFF7 (101) address; open with #EFF7 D7 (README)
+wire p_rtcd = !a[3] && a[2] && a[6] && a[14:12] == 3'b011 && eff7[7];
+wire p_rtca = !a[3] && a[2] && a[6] && a[14:12] == 3'b101 && eff7[7];
+// Kempston mouse (/P_MOUSE, DD146): A0 = A1 = A2 = 1, A5 = 0, A6 = 1, A12 = 1, A15 = 1; A8 / A10 select
+wire p_mouse = a[0] && a[1] && a[2] && !a[5] && a[6] && a[12] && a[15] && mouse_en;
+// SoundDrive (standard ports of 1.05, TopBoard DD11 чек): #0F, #1F, #4F, #5F; Covox #FB; not in TR-DOS
+reg [7:0] sd_a = 8'd0, sd_b = 8'd0, sd_c = 8'd0, sd_d = 8'd0, sd_fb = 8'd0;
 
 // #FC37: EM0 D0-D1, EM1 D2-D3, 7FD5_BLK D4, HLOAD D5, MTASK_ON D6, MODE_3+ D7
 wire [1:0] em0 = fc37[1:0], em1 = fc37[3:2];
@@ -199,6 +256,7 @@ always @(posedge clk) begin
 		dfd <= 3'd0; rr_1f <= 1'b0; shrom <= 1'b0; ra15m <= 1'b0; fd1_4 <= 1'b0; fd1_7 <= 1'b0;
 		p3_dos <= 1'b0; p3_d1 <= 1'b0; p3_d2 <= 1'b0;
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
+		sd_a <= 8'd0; sd_b <= 8'd0; sd_c <= 8'd0; sd_d <= 8'd0; sd_fb <= 8'd0;
 		eff7 <= 8'd0; fc37 <= fc37_init; fd37 <= 8'd0; ff37 <= ff37_init;
 		fe37 <= {int_firm, fe37_init};
 	end else if (!mode3 && (p3_dos || p3_d1 || p3_d2)) begin
@@ -207,6 +265,16 @@ always @(posedge clk) begin
 		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
 	end else if (iowr_s) begin
 		if (p_eff7) eff7 <= cpu_do;
+		if (p_rtca) rtc_a <= {2'b00, cpu_do[5:0]};   // MC146818: 64 addresses (14 + 50 bytes), A7 A6 not decoded
+		if (!dos && sd_en)
+			case (a[7:0])
+				8'h0F: sd_a <= cpu_do;
+				8'h1F: sd_b <= cpu_do;
+				8'h4F: sd_c <= cpu_do;
+				8'h5F: sd_d <= cpu_do;
+				8'hFB: sd_fb <= cpu_do;
+				default: ;
+			endcase
 		if (p_bios)
 			case (a[9:8])
 				2'd0: fc37 <= cpu_do;
@@ -243,6 +311,34 @@ always @(posedge clk) begin
 		end
 	end
 end
+
+// Nemo IDE (DD153-DD157): A0 = 0 a register of the drive (A7..A5 = its number, /CS0 = A3, /CS1 = A4); A0 = 1
+// (#11) the high byte of the data register: written before a word write, latched by a word read
+reg [7:0] ide_hi = 8'hFF;
+wire ide_reg = io && p_ide && !a[0];
+assign ide_a = a[7:5];
+assign ide_cs_n = ide_reg ? {a[4], a[3]} : 2'b11;
+assign ide_rd_n = !(ide_reg && !rd_n);
+assign ide_wr_n = !(ide_reg && !wr_n);
+assign ide_dout = {ide_hi, cpu_do};
+always @(posedge clk) begin
+	if (iowr_s && p_ide && a[0]) ide_hi <= cpu_do;
+	else if (!ide_rd_n) ide_hi <= ide_din[15:8];     // the last clock of the strobe stays
+end
+
+// ---------------- floppy (p4096_fdd.v) ----------------
+wire [7:0] fdd_do;
+p4096_fdd fdd (
+	.clk(clk), .reset(reset),
+	.sel(io && p_vg), .rd(!rd_n), .wr(!wr_n), .a(a[7:0]), .din(cpu_do), .dout(fdd_do), .wp(fdd_wp),
+	.img_mounted(fdd_img_mounted), .img_size(fdd_img_size),
+	.sdc_rd(fdd_sdc_rd), .sdc_wr(fdd_sdc_wr), .sdc_sector(fdd_sdc_sector), .sdc_busy(fdd_sdc_busy),
+	.sdc_done(fdd_sdc_done), .sdc_byte_addr(fdd_sdc_byte_addr), .sdc_byte_in_strobe(fdd_sdc_byte_in_strobe),
+	.sdc_byte_in_data(fdd_sdc_byte_in_data), .sdc_byte_out_data(fdd_sdc_byte_out_data), .active(fdd_active)
+);
+
+assign rtc_di = cpu_do;
+assign rtc_wr = iowr_s && p_rtcd;
 
 reg [7:0] osd_fe37_d = 8'd0;
 always @(posedge clk) osd_fe37_d <= {int_firm, fe37_init};
@@ -512,13 +608,15 @@ turbosound ts (
 	.BDIR(ay_sel && !wr_n), .BC(ay_sel && a[14]), .DI(cpu_do), .DO(ay_do), .AY_MODE(1'b0),
 	.SSG0_AUDIO_A(s0a), .SSG0_AUDIO_B(s0b), .SSG0_AUDIO_C(s0c),
 	.SSG1_AUDIO_A(s1a), .SSG1_AUDIO_B(s1b), .SSG1_AUDIO_C(s1c),
-	.MIDI_TX()
+	.MIDI_TX(midi_tx)
 );
 
 // ---------------- CPU data in ----------------
 always @(*) begin
 	if (!iorq_n && !m1_n)
 		cpu_di = 8'hFF;                                    // INTA: IM 2 vector FF
+	else if (iord && ext_oe)
+		cpu_di = ext_do;
 	else if (iord) begin
 		if (p_fe_r)
 			cpu_di = {1'b1, tape_in, 1'b1, kbd_d};
@@ -528,6 +626,18 @@ always @(*) begin
 			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
+		else if (p_kj)
+			cpu_di = {3'b000, joy};
+		else if (p_vg)
+			cpu_di = fdd_do;
+		else if (p_ide)
+			cpu_di = a[0] ? ide_hi : ide_din[7:0];
+		else if (p_rtcd)
+			cpu_di = rtc_do;
+		else if (p_mouse)
+			// the wheel in D7-D4 from F at rest (kg_cursor starts at 7, X = Y = 7F: three equal bytes, BIOS v4.2 took them
+			// for no mouse); the buttons D2-D0 low when pressed, as Kempston
+			cpu_di = !a[8] ? {ms_z ^ 4'h8, 1'b1, !ms_b[2], !ms_b[0], !ms_b[1]} : a[10] ? ms_y : ms_x;
 		else if (p_kj)
 			cpu_di = {3'b000, joy};
 		else if (p_ff)
@@ -549,8 +659,10 @@ reg tape_in_r = 1'b0;
 always @(posedge clk) begin
 	tape_in_r <= tape_in;
 	sum_l <= {4'd0, s0a} + {4'd0, s1a} + {5'd0, s0b[7:1]} + {5'd0, s1b[7:1]} +
+	         {4'd0, sd_a} + {4'd0, sd_b} + {5'd0, sd_fb[7:1]} +
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
 	sum_r <= {4'd0, s0c} + {4'd0, s1c} + {5'd0, s0b[7:1]} + {5'd0, s1b[7:1]} +
+	         {4'd0, sd_c} + {4'd0, sd_d} + {5'd0, sd_fb[7:1]} +
 	         (speaker ? 12'd384 : 12'd0) + (tape_out ? 12'd48 : 12'd0) + (tape_in_r ? 12'd48 : 12'd0);
 	audio_l <= {sum_l, 4'd0};
 	audio_r <= {sum_r, 4'd0};

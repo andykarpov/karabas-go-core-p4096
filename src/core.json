@@ -29,12 +29,16 @@
         {
             "filename": "roms/bios42.rom",
             "address": 131072
+        },
+        {
+            "filename": "roms/gs105b.rom",
+            "address": 2147483648
         }
     ],
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112009",
+            "build": "26112016",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -92,6 +96,16 @@
             "default": 1
         },
         {
+            "type": "S",
+            "name": "Mouse",
+            "index": 19,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0
+        },
+        {
             "type": "-"
         },
         {
@@ -103,6 +117,16 @@
             "type": "M",
             "name": "System",
             "open": 2
+        },
+        {
+            "type": "M",
+            "name": "Sound",
+            "open": 3
+        },
+        {
+            "type": "M",
+            "name": "Disks",
+            "open": 4
         },
         {
             "type": "-"
@@ -286,6 +310,92 @@
             ],
             "default": 1,
             "page": 2
+        },
+        {
+            "type": "S",
+            "name": "SoundDrive",
+            "index": 20,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
+        },
+        {
+            "type": "F",
+            "name": "Disk A",
+            "slot": 0,
+            "extensions": ".trd",
+            "page": 4,
+            "hotkey": "Menu+F5"
+        },
+        {
+            "type": "F",
+            "name": "Disk B",
+            "slot": 1,
+            "extensions": ".trd",
+            "page": 4,
+            "hotkey": "Menu+F6"
+        },
+        {
+            "type": "F",
+            "name": "Disk C",
+            "slot": 2,
+            "extensions": ".trd",
+            "page": 4
+        },
+        {
+            "type": "F",
+            "name": "Disk D",
+            "slot": 3,
+            "extensions": ".trd",
+            "page": 4
+        },
+        {
+            "type": "-",
+            "page": 4
+        },
+        {
+            "type": "S",
+            "name": "HDD Master",
+            "index": 21,
+            "options": [
+                "CF card",
+                "Image"
+            ],
+            "default": 0,
+            "page": 4
+        },
+        {
+            "type": "F",
+            "name": "HDF0",
+            "slot": 4,
+            "extensions": ".hdf .img .vhd",
+            "page": 4,
+            "enable_if": {
+                "item": "HDD Master",
+                "value": "Image"
+            }
+        },
+        {
+            "type": "F",
+            "name": "HDF1",
+            "slot": 5,
+            "extensions": ".hdf .img .vhd",
+            "page": 4
+        },
+        {
+            "type": "S",
+            "name": "General Snd",
+            "index": 22,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
         }
-    ]
+    ],
+    "rtc_mode": 0
 }
