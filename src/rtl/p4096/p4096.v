@@ -197,6 +197,8 @@ always @(posedge clk) begin
 		border <= 3'd0; border_bri <= 1'b0; tape_out <= 1'b0; speaker <= 1'b0;
 		eff7 <= 8'd0; fc37 <= fc37_init; fd37 <= 8'd0; ff37 <= ff37_init;
 		fe37 <= {int_firm, fe37_init};
+	end else if (!mode3 && (p3_dos || p3_d1 || p3_d2)) begin
+		p3_dos <= 1'b0; p3_d1 <= 1'b0; p3_d2 <= 1'b0;   // DD81 held in reset while MODE_3+ = 0 (DD78:3, DD76:3)
 	end else if ({int_firm, fe37_init} != osd_fe37_d) begin
 		fe37 <= {int_firm, fe37_init};         // the OSD changed one of the settings of #FE37
 	end else if (iowr_s) begin
