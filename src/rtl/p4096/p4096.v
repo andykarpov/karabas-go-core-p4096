@@ -110,7 +110,13 @@ module p4096 (
 	output wire [15:0] cpu_a,
 	output wire [7:0]  cpu_dout,
 	output wire        cpu_m1_n,
-	output wire        int_n_o
+	output wire        cpu_iorq_n,
+	output wire        cpu_rd_n,
+	output wire        cpu_wr_n,
+	output wire        int_n_o,
+	// devices outside the machine on the CPU bus (General Sound of the top): their read data, the highest priority
+	input  wire        ext_oe,
+	input  wire [7:0]  ext_do
 );
 
 // ---------------- raster ----------------
@@ -160,6 +166,9 @@ reg int_n = 1'b1;
 assign cpu_a = a;
 assign cpu_dout = cpu_do;
 assign cpu_m1_n = m1_n;
+assign cpu_iorq_n = iorq_n;
+assign cpu_rd_n = rd_n;
+assign cpu_wr_n = wr_n;
 assign int_n_o = int_n;
 
 z80s_t80pa cpu (
@@ -604,6 +613,8 @@ turbosound ts (
 always @(*) begin
 	if (!iorq_n && !m1_n)
 		cpu_di = 8'hFF;                                    // INTA: IM 2 vector FF
+	else if (iord && ext_oe)
+		cpu_di = ext_do;
 	else if (iord) begin
 		if (p_fe_r)
 			cpu_di = {1'b1, tape_in, 1'b1, kbd_d};

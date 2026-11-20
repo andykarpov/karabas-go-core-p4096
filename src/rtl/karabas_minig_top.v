@@ -219,7 +219,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 22;
+localparam SW_N = 23;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -387,6 +387,7 @@ wire [1:0] sw_reset_to = softsw[17*8 +: 2];   // Reset to (Direct): Gluk / Menu-
 wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No wait
 wire sw_mouse_off = softsw[19*8];        // 19 Mouse On / Off (Kempston mouse)
 wire sw_sd_off = softsw[20*8];           // 20 SoundDrive On / Off
+wire sw_gs_off = softsw[22*8];           // 22 General Sound On / Off
 wire sw_hdd_image = softsw[21*8];        // 21 HDD Master: CF card / Image (HDF0); HDF1 = Slave (image)
 reg [3:0] em;
 always @(*)
@@ -399,6 +400,16 @@ wire [7:0] ff37_init = sw_boot_bios ? 8'h00 : 8'h23;
 wire [7:0] p7_init = (sw_reset_to == 2'd3) ? 8'h30 : (sw_reset_to == 2'd2) ? 8'h10 : 8'h00;
 wire [1:0] hw_btn = mcu_btns[1:0];
 
+// ---------- General Sound (gs.v of core-baseconf: z80-silicon at 14 MHz, ports #BB / #B3) ----------
+// Its ROM (gs105b.rom, core.json at 80000000) and RAM: port 2 of baseconf_storage (the low 64 KB in block RAM,
+// the rest in the SDRAM), as core-baseconf. OSD General Sound Off: reset, its ports do not answer, no sound.
+wire [15:0] cpu_a;
+wire cpu_iorq_n, cpu_rd_n, cpu_wr_n, cpu_m1_n;
+wire [20:0] gs_addr;
+wire [7:0] gs_mdi, gs_mdo, gs_do_i, gs_do;
+wire gs_rd_n, gs_wr_n, gs_done, gs_oe_i, gs_oe;
+wire gs_req = !gs_rd_n || !gs_wr_n;
+wire signed [14:0] gs_l, gs_r;
 // ---------- the ROM loader and the storage (SDRAM) ----------
 wire ld_rom_act = ld_active && ld_kind == 2'd0;
 wire ld_rom_wr = ld_wr && ld_kind == 2'd0;
@@ -412,7 +423,7 @@ always @(posedge clk_sys) storage_key_rst <= {storage_key_rst[0], sw_reset | hw_
 baseconf_storage storage(
 	.clk(clk_sys), .reset(!locked || storage_key_rst[1]), .sdram_init_n(locked),
 	.rom_req(rom_req), .rom_wr(rom_wr), .rom_addr(rom_addr), .rom_din(rom_din), .rom_dout(rom_q), .rom_done(rom_done),
-	.gs_req(1'b0), .gs_wr(1'b0), .gs_addr(21'd0), .gs_din(8'd0), .gs_dout(), .gs_done(),
+	.gs_req(gs_req), .gs_wr(!gs_wr_n), .gs_addr(gs_addr), .gs_din(gs_mdo), .gs_dout(gs_mdi), .gs_done(gs_done),
 	.loader_act(ld_rom_act), .loader_wr(ld_rom_wr), .loader_addr(ld_addr), .loader_data(ld_data),
 	.fl_wr(1'b0), .fl_a(32'd0), .fl_d(8'd0),
 	.opl_addr(22'd0), .opl_req(1'b0), .opl_we(1'b0), .opl_wdata(8'd0), .opl_ack(), .opl_rdata(),
@@ -487,6 +498,18 @@ kg_cursor #(.Z_W(4), .Z_NEG(1), .Z_ACC(1)) cursor(
 reg tape_in_r = 1'b0;
 always @(posedge clk_bus) tape_in_r <= TAPE_IN;
 
+// ---------- General Sound: the processor (declarations above the storage) ----------
+reg gs_ce = 1'b0;
+always @(posedge clk_bus) gs_ce <= !gs_ce;
+reg [1:0] gs_rst = 2'b11;
+always @(posedge clk_bus) gs_rst <= {gs_rst[0], machine_reset | sw_gs_off};
+gs gs(.CLK(clk_bus), .RESET(gs_rst[1]), .CE(gs_ce), .CE_N(!gs_ce), .MEM_WAIT(gs_req && !gs_done), .SAMPLE_T(),
+	.A(cpu_a), .DI(cpu_dout), .DO(gs_do_i), .OE(gs_oe_i), .WR_n(cpu_wr_n), .RD_n(cpu_rd_n),
+	.IORQ_n(cpu_iorq_n | sw_gs_off), .M1_n(cpu_m1_n), .MA(gs_addr), .MDI(gs_mdi), .MDO(gs_mdo),
+	.MRFSH_n(), .MWE_n(gs_wr_n), .MRD_n(gs_rd_n), .OUT_L(gs_l), .OUT_R(gs_r));
+assign gs_oe = gs_oe_i && !sw_gs_off;
+assign gs_do = gs_do_i;
+
 // ---------- the machine ----------
 wire [21:0] mem_a;
 wire mem_rd, mem_wr, mem_oe_n;
@@ -495,7 +518,8 @@ wire dot_we, line_start;
 wire [9:0] dot_x;
 wire [8:0] dot_line;
 wire [17:0] dot_rgb;
-wire [15:0] audio_l, audio_r;
+wire [15:0] audio_l, audio_r;          // the machine (positive, 0..32144)
+wire [15:0] mix_l, mix_r;              // + General Sound
 wire tape_out;
 
 p4096 p4096 (
@@ -566,9 +590,14 @@ p4096 p4096 (
 	.line_start		(line_start),
 	.audio_l			(audio_l),
 	.audio_r			(audio_r),
-	.cpu_a			(),
+	.cpu_a			(cpu_a),
 	.cpu_dout		(cpu_dout),
-	.cpu_m1_n		(),
+	.cpu_iorq_n		(cpu_iorq_n),
+	.cpu_rd_n		(cpu_rd_n),
+	.cpu_wr_n		(cpu_wr_n),
+	.ext_oe			(gs_oe),
+	.ext_do			(gs_do),
+	.cpu_m1_n		(cpu_m1_n),
 	.int_n_o			()
 );
 assign TAPE_OUT = tape_out;
@@ -695,19 +724,31 @@ kg_hdmi_ft #(.CLKRATE(28030303), .REF_MHZ(8'd28), .SAMPLERATE(48000), .OUTPUT_RE
 	.ft_de			(FT_DE),
 	.ft_sel			(mcu_ft_vga_on),
 	.audio_en		(~dvi_only),
-	.audio_l			(audio_l),
-	.audio_r			(audio_r),
+	.audio_l			(mix_l),
+	.audio_r			(mix_r),
 	.tmds_p			(TMDS_P),
 	.tmds_n			(TMDS_N),
 	.freq				(hdmi_freq)
 );
 
+// ---------- the mix: the machine at half + General Sound (15 bits signed), saturated ----------
+function [15:0] sat16(input signed [17:0] x);
+	sat16 = (x > 18'sd32767) ? 16'h7FFF : (x < -18'sd32768) ? 16'h8000 : x[15:0];
+endfunction
+reg [15:0] mix_l_r = 16'd0, mix_r_r = 16'd0;
+always @(posedge clk_bus) begin
+	mix_l_r <= sat16($signed({3'b000, audio_l[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_l[14]}}, gs_l})));
+	mix_r_r <= sat16($signed({3'b000, audio_r[15:1]}) + (sw_gs_off ? 18'sd0 : $signed({{3{gs_r[14]}}, gs_r})));
+end
+assign mix_l = mix_l_r;
+assign mix_r = mix_r_r;
+
 // ---------- i2s DAC ----------
 kg_pcm5102 #(.DIV_BITS(2)) PCM5102(
 	.clk				(clk_bus),
 	.reset			(areset),
-	.left				(audio_l),
-	.right			(audio_r),
+	.left				(mix_l),
+	.right			(mix_r),
 	.din				(DAC_DAT),
 	.bck				(DAC_BCK),
 	.lrck				(DAC_WS)

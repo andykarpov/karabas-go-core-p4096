@@ -29,12 +29,16 @@
         {
             "filename": "roms/bios42.rom",
             "address": 131072
+        },
+        {
+            "filename": "roms/gs105b.rom",
+            "address": 2147483648
         }
     ],
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112012",
+            "build": "26112013",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -380,6 +384,17 @@
             "slot": 5,
             "extensions": ".hdf .img .vhd",
             "page": 4
+        },
+        {
+            "type": "S",
+            "name": "General Snd",
+            "index": 22,
+            "options": [
+                "On",
+                "Off"
+            ],
+            "default": 0,
+            "page": 3
         }
     ],
     "rtc_mode": 0

@@ -57,7 +57,7 @@ p4096 dut (
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_wr(rom_wr), .rom_din(rom_din), .rom_q(rom_q), .rom_done(rom_done),
 	.dot_we(dot_we), .dot_x(dot_x), .dot_line(dot_line), .dot_rgb(dot_rgb), .line_start(line_start),
 	.audio_l(audio_l), .audio_r(audio_r),
-	.cpu_a(cpu_a), .cpu_dout(cpu_dout), .cpu_m1_n(cpu_m1_n), .int_n_o(int_n)
+	.cpu_a(cpu_a), .cpu_dout(cpu_dout), .cpu_iorq_n(), .cpu_rd_n(), .cpu_wr_n(), .ext_oe(1'b0), .ext_do(8'hFF), .cpu_m1_n(cpu_m1_n), .int_n_o(int_n)
 );
 
 // +trd=FILE: a disk image in drive A, served as the file mounter of the mcu does (slot 0: busy, 512 bytes with
