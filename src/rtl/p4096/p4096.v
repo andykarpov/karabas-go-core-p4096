@@ -634,7 +634,9 @@ always @(*) begin
 		else if (p_rtcd)
 			cpu_di = rtc_do;
 		else if (p_mouse)
-			cpu_di = !a[8] ? {ms_z, 1'b1, !ms_b[2], !ms_b[0], !ms_b[1]} : a[10] ? ms_y : ms_x;
+			// the wheel in D7-D4 from F at rest (kg_cursor starts at 7, X = Y = 7F: three equal bytes, BIOS v4.2 took them
+			// for no mouse); the buttons D2-D0 low when pressed, as Kempston
+			cpu_di = !a[8] ? {ms_z ^ 4'h8, 1'b1, !ms_b[2], !ms_b[0], !ms_b[1]} : a[10] ? ms_y : ms_x;
 		else if (p_kj)
 			cpu_di = {3'b000, joy};
 		else if (p_ff)

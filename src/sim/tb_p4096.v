@@ -107,17 +107,25 @@ always @(posedge clk) begin
 end
 // +iolog: every IO access to a port xxF7 (and #EFF7 reads) to the log, once per access
 reg io_seen = 1'b0;
+reg [7:0] io_d_last = 8'h00;
+reg [15:0] io_a_last = 16'h0000;
+reg io_rd_last = 1'b0;
 always @(posedge clk) begin
 	if (!dut.iorq_n && dut.m1_n && (!dut.rd_n || !dut.wr_n) && !io_seen) begin
 		io_seen <= 1'b1;
-		if (fl != 0 && iolog && dut.a[3:0] == 4'h7)
+		if (fl != 0 && iolog && (dut.a[3:0] == 4'h7 || (dut.a[7:0] == 8'hFF && dut.eff7[1])))
 			$fwrite(fl, "IO %s %04x %02x pc %04x\n", !dut.rd_n ? "IN " : "OUT", dut.a, !dut.rd_n ? dut.cpu_di : dut.cpu_do, last_pc);
 		if (iolog && dut.a == 16'hDFF7 && dut.cpu_do == 8'h11 && trace_first) begin
 			trace_n = 400; trace_first = 1'b0;
 			for (i = 0; i < 64; i = i + 1) $fwrite(fl, "MEM %04x %02x\n", 16'h5FE0 + i, ram[5 * 16384 + 16'h1FE0 + i]);
 		end
-	end else if (dut.iorq_n)
+	end else if (dut.iorq_n) begin
+		if (io_seen && fl != 0 && iolog && io_rd_last && io_a_last[7:0] == 8'hFF)
+			$fwrite(fl, "IOEND %02x\n", io_d_last);
 		io_seen <= 1'b0;
+	end
+	if (!dut.iorq_n && dut.m1_n && !dut.rd_n) begin io_d_last <= dut.cpu_di; io_a_last <= dut.a; io_rd_last <= 1'b1; end
+	else if (dut.iorq_n) io_rd_last <= io_rd_last;
 end
 
 // RAM: the byte of a read in the next clock (the input register of the top); a write in its first clock
