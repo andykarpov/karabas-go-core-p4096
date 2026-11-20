@@ -212,17 +212,18 @@ wire p_fe_w = !a[0] && a[2] && a[6];
 wire p_ide = !a[1] && !a[2] && !dos;
 wire p_fe_r = !a[0] && !p_ide;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
-// IODOS: the TR-DOS ports open: T_DOS or #EFF7 D7 (README: "открытие скрытых портов RTC и FDC")
-wire iodos = dos || eff7[7];
-wire p_ff = a[7:0] == 8'hFF && !iodos;
-// VG93 and its system port (DD27, DD132, DD131; ош. 1: A2 = A3 = 1): A0-A3 = 1, IODOS
-wire p_vg = a[0] && a[1] && a[2] && a[3] && iodos;
+// The TR-DOS ports follow T_DOS. #EFF7 D7 opens the clock (#BFF7 / #DFF7) only: BIOS v4.2 runs with #EFF7 = 82 and
+// finds Kempston and the attribute port #FF, which the gate of the TR-DOS ports (DD70:4 /IODOS) closes, so D7 is
+// not in /IODOS (README: "RTC и FDC", чек; docs/HW.md)
+wire p_ff = a[7:0] == 8'hFF && !dos;
+// VG93 and its system port (DD27, DD132, DD131; ош. 1: A2 = A3 = 1): A0-A3 = 1
+wire p_vg = a[0] && a[1] && a[2] && a[3] && dos;
 // #xxF7 (DD90): A3 = 0, A2 = 1, A6 = 1; A14 A13 A12 = 110: #EFF7
 wire p_eff7 = !a[3] && a[2] && a[6] && a[14:12] == 3'b110;
 // BIOS ports #FC37-#FF37 (DD60), write only: A3 = A6 = A7 = 0, A2 = 1, A10 = 1; A9 A8 select
 wire p_bios = !a[3] && !a[6] && !a[7] && a[2] && a[10];
 // Kempston #1F: A5 = A7 = 0, A3 = 1, not TR-DOS
-wire p_kj = !a[5] && !a[7] && a[3] && !iodos;   // #FE (A0 = 0) has the priority in cpu_di
+wire p_kj = !a[5] && !a[7] && a[3] && !dos;   // #FE (A0 = 0) has the priority in cpu_di
 // CMOS (DD90 as #EFF7): #BFF7 (A14 A13 A12 = 011) data, #DFF7 (101) address; open with #EFF7 D7 (README)
 wire p_rtcd = !a[3] && a[2] && a[6] && a[14:12] == 3'b011 && eff7[7];
 wire p_rtca = !a[3] && a[2] && a[6] && a[14:12] == 3'b101 && eff7[7];
@@ -624,6 +625,8 @@ always @(*) begin
 			cpu_di = {border[2], eff7[6], eff7[5], border[1], eff7[3], border[0], eff7[1], eff7[0]};
 		else if (p_7ffd)
 			cpu_di = {p7_d7, p7_d6, p7_d5, spage0, scr, p7_page};
+		else if (p_kj)
+			cpu_di = {3'b000, joy};
 		else if (p_vg)
 			cpu_di = fdd_do;
 		else if (p_ide)

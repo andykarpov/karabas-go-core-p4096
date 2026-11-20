@@ -38,7 +38,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112013",
+            "build": "26112014",
             "bitstream": "karabas_minig.bin"
         }
     },

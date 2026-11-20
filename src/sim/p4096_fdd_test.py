@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Ф4 floppy: a ROM program opens the TR-DOS ports (#EFF7 D7), restores the drive A (#FF = 3C, #1F = 08), reads
+"""Ф4 floppy: a ROM program enters TR-DOS (#7FFD = 10, jp 3D2F: M1 there with ROM 48 switches to the TR-DOS ROM,
+where the test code of this script is, page 1 of the test ROM), restores the drive A (#FF = 3C, #1F = 08), reads
 sector 9 of track 0 (#5F = 9, #1F = 80) of a TRD image into 6000.. (page 5) and writes the status after the read
 and the bytes E7, E1 of the sector (the TR-DOS id 10, the first free sector) to 5B00..5B02; tb_p4096 serves the
 image as the mcu does. Then the same for track 1 side 1 (TRD track 3) sector 1: its byte 0 to 5B03.
@@ -18,16 +19,17 @@ def out(port, val):
 
 
 def wait_intrq():
-    # loop: in a,(#FF); rla; jr nc,loop
-    return [0xDB, 0xFF, 0x17, 0x30, 0xFB]
+    # the end of a command: BUSY (status bit 0) low. loop: in a,(#1F); rra; jr c,loop
+    return [0xDB, 0x1F, 0x1F, 0x38, 0xFB]
 
 
 def read_sector(dest):
-    # ld hl,dest; loop: in a,(#FF); bit 7 -> done (INTRQ); bit 6 -> in a,(#7F); ld (hl),a; inc hl
+    # ld hl,dest; loop: in a,(#1F); bit 1 (DRQ) -> in a,(#7F); ld (hl),a; inc hl; bit 0 (BUSY) low -> done
+    # (outside TR-DOS the system port #FF reads as the attribute port: the status register is polled)
     return [0x21, dest & 0xFF, dest >> 8,
-            0xDB, 0xFF, 0xCB, 0x7F, 0x20, 0x0A,       # in a,(FF); bit 7,a; jr nz,done (+10)
-            0xCB, 0x77, 0x28, 0xF6,                   # bit 6,a; jr z,loop (-10)
-            0xDB, 0x7F, 0x77, 0x23, 0x18, 0xF0]       # in a,(7F); ld (hl),a; inc hl; jr loop (-16)
+            0xDB, 0x1F, 0xCB, 0x4F, 0x28, 0x06,       # loop: in a,(1F); bit 1,a; jr z,nodrq (+6)
+            0xDB, 0x7F, 0x77, 0x23, 0x18, 0xF4,       # in a,(7F); ld (hl),a; inc hl; jr loop (-12)
+            0x1F, 0x38, 0xF1]                         # nodrq: rra; jr c,loop (-15) (BUSY)
 
 
 def main():
@@ -39,7 +41,7 @@ def main():
     img[info + 0xE3] = 0x16                           # disk type: 80 tracks, 2 sides
     img[info + 0xE7] = 0x10                           # TR-DOS id
     img[3 * 4096 + 0] = 0x5A                          # TRD track 3 = track 1 side 1, sector 1
-    p = [0xF3, 0x31, 0x00, 0xBE] + out(0xEFF7, 0x80) + out(0x00FF, 0x3C) + out(0x001F, 0x08) + wait_intrq()
+    p = [0xF3, 0x31, 0x00, 0xBE] + out(0x00FF, 0x3C) + out(0x001F, 0x08) + wait_intrq()
     p += out(0x005F, 9) + out(0x001F, 0x80) + read_sector(0x6000)
     p += [0xDB, 0x1F, 0x32, 0x01, 0x5B]               # in a,(1F): status -> 5B01
     p += [0x3A, 0xE7, 0x60, 0x32, 0x00, 0x5B, 0x3A, 0xE1, 0x60, 0x32, 0x02, 0x5B]
@@ -47,11 +49,17 @@ def main():
     p += out(0x007F, 1) + out(0x001F, 0x18) + wait_intrq() + out(0x00FF, 0x2C)
     p += out(0x005F, 1) + out(0x001F, 0x80) + read_sector(0x6100)
     p += [0x3A, 0x00, 0x61, 0x32, 0x03, 0x5B, 0xF3, 0x76]
-    rom = bytearray(16384)
-    rom[0:len(p)] = bytes(p)
+    dosrom = bytearray(16384)
+    dosrom[0x3D2F:0x3D2F + len(p)] = bytes(p)
+    boot = bytearray(16384)
+    # the switch runs from the RAM (8000): #7FFD = 10 changes the ROM under the code
+    stub = out(0x7FFD, 0x10) + [0xC3, 0x2F, 0x3D]
+    b = [0xF3, 0x21, 0x00, 0x01, 0x11, 0x00, 0x80, 0x01, len(stub), 0x00, 0xED, 0xB0, 0xC3, 0x00, 0x80]
+    boot[0:len(b)] = bytes(b)
+    boot[0x100:0x100 + len(stub)] = bytes(stub)
     src = os.path.join(HERE, '..', 'roms')
-    full = open(os.path.join(src, 'glukpen.rom'), 'rb').read() + open(os.path.join(src, 'tr5_03.rom'), 'rb').read() + \
-        bytes(rom) + open(os.path.join(src, 'basic48_128_std.rom'), 'rb').read()
+    full = open(os.path.join(src, 'glukpen.rom'), 'rb').read() + bytes(dosrom) + \
+        bytes(boot) + open(os.path.join(src, 'basic48_128_std.rom'), 'rb').read()
     romhex = os.path.join(outdir, 'fdd_rom.hex')
     trdhex = os.path.join(outdir, 'fdd_trd.hex')
     with open(romhex, 'w') as f:

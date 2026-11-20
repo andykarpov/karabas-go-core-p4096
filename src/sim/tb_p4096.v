@@ -19,6 +19,8 @@ always #17.84 clk = ~clk;
 reg [7:0] ram [0:4194303];   // 4 MB (the SRAM of the board)
 reg [7:0] rom [0:524287];   // 512 KB: the space of baseconf_storage (main ROM 0..127 KB, ...)
 integer i, frames, nframe, fd, fl, rom_lat, space_at;
+reg iolog;
+reg trace_first = 1'b1;
 reg hold, firm, xj3, gl;
 reg [7:0] fc37, ff37;
 reg [1:0] turbo;
@@ -48,7 +50,7 @@ p4096 dut (
 	.clk(clk), .reset(reset),
 	.turbo(turbo), .turbo14_wait($test$plusargs("waitp")), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
 	.kbd_a(kbd_a), .kbd_d(kbd_d), .joy(5'b00000), .tape_in(1'b0), .mouse_en(1'b1), .ms_x(8'h12), .ms_y(8'h34), .ms_z(4'h0), .ms_b(3'b000), .sd_en(1'b1),
-	.rtc_a(), .rtc_di(), .rtc_wr(), .rtc_do(8'h00),
+	.rtc_a(rtc_a), .rtc_di(rtc_di), .rtc_wr(rtc_wr), .rtc_do(rtc_do),
 	.fdd_wp(4'd0), .fdd_img_mounted(fdd_mnt), .fdd_img_size(fdd_size), .fdd_sdc_rd(fdd_rd), .fdd_sdc_wr(fdd_wr),
 	.fdd_sdc_sector(fdd_sector), .fdd_sdc_busy(fdd_busy), .fdd_sdc_done(fdd_done), .fdd_sdc_byte_addr(fdd_baddr),
 	.fdd_sdc_byte_in_strobe(fdd_bstb), .fdd_sdc_byte_in_data(fdd_bdata), .fdd_sdc_byte_out_data(fdd_bout), .fdd_active(),
@@ -92,6 +94,30 @@ always @(posedge clk) begin
 		end
 		3: begin fdd_busy <= 1'b0; fdd_done <= 1'b1; fdd_st <= 0; end
 	endcase
+end
+
+// the clock registers as kg_l2_rtc (rtc_a -> rtc_do a clock later), MC146818 values: A 26, B 02, D 80
+reg [7:0] rtc_ram [0:255];
+wire [7:0] rtc_a, rtc_di;
+wire rtc_wr;
+reg [7:0] rtc_do = 8'h00;
+always @(posedge clk) begin
+	rtc_do <= rtc_ram[rtc_a];
+	if (rtc_wr) rtc_ram[rtc_a] <= rtc_di;
+end
+// +iolog: every IO access to a port xxF7 (and #EFF7 reads) to the log, once per access
+reg io_seen = 1'b0;
+always @(posedge clk) begin
+	if (!dut.iorq_n && dut.m1_n && (!dut.rd_n || !dut.wr_n) && !io_seen) begin
+		io_seen <= 1'b1;
+		if (fl != 0 && iolog && dut.a[3:0] == 4'h7)
+			$fwrite(fl, "IO %s %04x %02x pc %04x\n", !dut.rd_n ? "IN " : "OUT", dut.a, !dut.rd_n ? dut.cpu_di : dut.cpu_do, last_pc);
+		if (iolog && dut.a == 16'hDFF7 && dut.cpu_do == 8'h11 && trace_first) begin
+			trace_n = 400; trace_first = 1'b0;
+			for (i = 0; i < 64; i = i + 1) $fwrite(fl, "MEM %04x %02x\n", 16'h5FE0 + i, ram[5 * 16384 + 16'h1FE0 + i]);
+		end
+	end else if (dut.iorq_n)
+		io_seen <= 1'b0;
 end
 
 // RAM: the byte of a read in the next clock (the input register of the top); a write in its first clock
@@ -165,6 +191,9 @@ initial begin
 	if (!$value$plusargs("frames=%d", frames)) frames = 2;
 	if (!$value$plusargs("trace=%d", trace_n)) trace_n = 0;
 	if (!$value$plusargs("space=%d", space_at)) space_at = -1;
+	iolog = $test$plusargs("iolog");
+	for (i = 0; i < 256; i = i + 1) rtc_ram[i] = 8'h00;
+	rtc_ram[10] = 8'h26; rtc_ram[11] = 8'h02; rtc_ram[17] = 8'hAA; rtc_ram[13] = 8'h80;
 	if (!$value$plusargs("fc37=%h", fc37)) fc37 = 8'h1A;      // BIOS v4.2: scheme 5 (Profi + Pentagon), D5 latch
 	gl = !$test$plusargs("gluk");
 	if (!$value$plusargs("ff37=%h", ff37)) ff37 = 8'h23;      // what BIOS v4.2 leaves (00: start the BIOS)
@@ -195,6 +224,11 @@ initial begin
 	if ($value$plusargs("ramdump5b=%s", fname)) begin    // 5B00..5B03 of page 5 (p4096_speed.py)
 		fd = $fopen(fname, "w");
 		for (i = 0; i < 4; i = i + 1) $fwrite(fd, "%02x\n", ram[5 * 16384 + 16'h1B00 + i]);
+		$fclose(fd);
+	end
+	if ($value$plusargs("p5dump=%s", fname)) begin     // page 5 (4000-7FFF of the CPU), binary as hex lines
+		fd = $fopen(fname, "w");
+		for (i = 0; i < 16384; i = i + 1) $fwrite(fd, "%02x\n", ram[5 * 16384 + i]);
 		$fclose(fd);
 	end
 	if ($value$plusargs("pagedump=%s", fname)) begin   // the first 2 bytes of each 16 KB page
