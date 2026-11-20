@@ -201,7 +201,7 @@ wire ld_active, ld_wr;
 wire [31:0] ld_addr;
 wire [7:0] ld_data;
 
-localparam SW_N = 18;
+localparam SW_N = 19;
 wire [SW_N*8-1:0] softsw;
 wire sw_wr;
 
@@ -364,6 +364,7 @@ wire sw_plus3 = softsw[14*8];            // +3 mode (#FC37 D7)
 wire sw_mtask = softsw[15*8];            // Multitask (#FC37 D6)
 wire sw_boot_bios = softsw[16*8];        // Boot: Direct / BIOS (#FF37 = 23 as BIOS leaves it / 00: BIOS v4.2 runs)
 wire [1:0] sw_reset_to = softsw[17*8 +: 2];   // Reset to (Direct): Gluk / Menu-128 / TR-DOS / BASIC 48
+wire sw_turbo_nowait = softsw[18*8];     // 18 Turbo 14: Original (WAITP) / No wait
 reg [3:0] em;
 always @(*)
 	case (sw_mem)
@@ -459,6 +460,7 @@ p4096 p4096 (
 	.clk				(clk_bus),
 	.reset			(machine_reset),
 	.turbo			(sw_cpu),
+	.turbo14_wait	(!sw_turbo_nowait),
 	.int_firm		(sw_int_firm),
 	.int_xj3			(sw_int_xj3),
 	.fe37_init		({sw_giga, sw_flashcol, sw_col512, sw_ink512}),

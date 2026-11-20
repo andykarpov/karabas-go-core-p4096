@@ -34,7 +34,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112006",
+            "build": "26112007",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -202,6 +202,17 @@
             ],
             "default": 0,
             "page": 1
+        },
+        {
+            "type": "S",
+            "name": "Turbo 14",
+            "index": 18,
+            "options": [
+                "Original",
+                "No wait"
+            ],
+            "default": 0,
+            "page": 2
         },
         {
             "type": "S",

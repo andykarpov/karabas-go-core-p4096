@@ -25,6 +25,7 @@ module p4096 (
 
 	// settings (OSD)
 	input  wire [1:0]  turbo,         // 0 3.5, 1 7, 2 14 MHz
+	input  wire        turbo14_wait,  // 14 MHz: 1 = Original (WAITP: RAM accesses wait for their DRAM slot)
 	input  wire        int_firm,      // OSD: the value of #FE37 D7 (INT_SEL) at reset and when the OSD changes it
 	input  wire [6:0]  fe37_init,     // OSD: #FE37 D0-D6 at reset and when the OSD changes them (BIOS v4.2: 07)
 	input  wire        pal_en,        // OSD Palette: 0 = the standard 16 colours (XJ1-XJ3 of the TopBoard)
@@ -349,9 +350,16 @@ always @(*) begin
 	else
 		st_page = {3'b010, prnrom ? 2'b11 : ff37[3:2]};          // BIOS ROM (page 3 = the printer ROM)
 end
-assign rom_addr = {st_page, a[13:0]};
-assign rom_req = rom_sel && !mreq_n && (!rd_n || (!wr_n && st_wr));
-assign rom_wr = !wr_n;
+wire [18:0] st_addr = {st_page, a[13:0]};
+wire st_req = rom_sel && !mreq_n && (!rd_n || (!wr_n && st_wr));
+// the byte cache of the storage (p4096_romcache.v): ROM reads without WAIT once cached
+wire st_done;
+wire [7:0] st_q;
+p4096_romcache romcache (
+	.clk(clk), .reset(reset),
+	.req(st_req), .wr(!wr_n), .addr(st_addr), .din(cpu_do), .done(st_done), .q(st_q),
+	.s_req(rom_req), .s_wr(rom_wr), .s_addr(rom_addr), .s_din(), .s_done(rom_done), .s_q(rom_q)
+);
 // the Gluk latch: /RSGLK (#FF37 D1) = 0 holds both flip-flops reset (page 0, Gluk Reset Service); after D1 = 1
 // the first sets on M1 in 0000-3FFF, gl on the next M1 from the RAM. Without BIOS: gl = 1 at reset (gl_init)
 always @(posedge clk) begin
@@ -412,7 +420,13 @@ reg rd_cpu_q = 1'b0;         // mem_q of this clock is the byte of the CPU
 reg [7:0] cpu_q = 8'hFF;
 wire video_next = (c5[2:0] == 3'd7);     // the next clock is a video slot
 wire video_next2 = (c5[2:0] == 3'd6);    // a write now would run into it
-wire rd_issue = !video_next && !wr_hold && !mem_wr && !wb_full && cpu_ram_rd && !served;
+// Turbo 14 "Original" (WAITP, DD115:2): the original DRAM runs at 7 MHz and a CPU request at 14 MHz waits for its
+// slot (README: 290 % at 14 MHz). The exact rule is open (docs/QUESTIONS.md 10): here a RAM access of the CPU starts
+// only where waitp_ok (WAITP_MASK of c5, the clock in the cell), tuned with src/sim/p4096_speed.py to the speed of the README.
+// Reads only: a write goes into the buffer (its /WR is too short at 14 MHz to wait for the slot).
+localparam [31:0] WAITP_MASK = 32'hF0F0F0C0;   // 301 % (the speed test of BIOS v4.2), README: about 290 %
+wire waitp_ok = !(turbo_r == 2'd2 && turbo14_wait) || WAITP_MASK[c5];
+wire rd_issue = !video_next && !wr_hold && !mem_wr && !wb_full && cpu_ram_rd && !served && waitp_ok;
 wire wb_issue = !video_next && !video_next2 && !wr_hold && !mem_wr && wb_full;
 
 always @(posedge clk) begin
@@ -453,7 +467,7 @@ end
 // cpu_q later; the CPU takes it at an edge after the one that samples WAIT
 wire ram_wait = cpu_ram_rd && !served;
 wire ram_wait_wr = cpu_ram_wr && !served && wb_full;   // a second write while the buffer is full
-assign wait_n = !(rom_req && !rom_done) && !ram_wait && !ram_wait_wr;
+assign wait_n = !(st_req && !st_done) && !ram_wait && !ram_wait_wr;
 wire [7:0] ram_q = rd_cpu_q ? mem_q : cpu_q;
 
 // ---------------- INT ----------------
@@ -515,7 +529,7 @@ always @(*) begin
 		else
 			cpu_di = 8'hFF;
 	end else if (rom_sel)
-		cpu_di = rom_q;
+		cpu_di = st_q;
 	else
 		cpu_di = ram_q;
 end

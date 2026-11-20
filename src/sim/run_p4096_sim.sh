@@ -5,6 +5,7 @@
 #          TB_ARGS=+fc37=9a: the +3 mode (the +3 menu); TB_ARGS=+ff37=00: start BIOS v4.2
 #   modes  Ф2: all video modes, the palette, FlashColor, GigaScreen against p4096_vmodel.py (p4096_modes.py)
 #   mem    Ф3: the memory schemes 0-6 of #FC37 against the table of docs/HW.md (p4096_mem.py)
+#   speed  the CPU speed test of BIOS v4.2 (p4096_speed.py) at every Turbo setting
 #   int    INT against the raster: int_test.asm here and in unreal-ng PENTAGON (emu-shot), the border stripes
 #          must be at the same points (TB_ARGS="+firm" etc. for the other settings, no reference then)
 # Output in src/sim/build/p4096. Verilator, not iverilog: z80-silicon has registers without an initial value
@@ -21,7 +22,7 @@ N=${2:-60}
 if [ ! -x "$OUT/obj/tb" ] || [ -n "$(find "$RTL/p4096" "$SIM/tb_p4096.v" -newer "$OUT/obj/tb" 2>/dev/null)" ]; then
 	verilator --binary --timing --default-language 1364-2005 -Wno-fatal -Wno-lint -Wno-style -Wno-MULTIDRIVEN \
 		--x-initial 0 --x-assign 0 -O2 --top-module tb_p4096 -Mdir "$OUT/obj" -o tb \
-		"$SIM/tb_p4096.v" "$RTL/p4096/p4096.v" "$RTL/p4096/p4096_video.v" \
+		"$SIM/tb_p4096.v" "$RTL/p4096/p4096.v" "$RTL/p4096/p4096_video.v" "$RTL/p4096/p4096_romcache.v" \
 		"$RTL/z80-silicon/z80s_t80pa.v" "$RTL/z80-silicon/z80_silicon_cen.v" \
 		"$RTL/sound/turbosound.v" "$RTL/sound/ym2149.v" > "$OUT/build.log" 2>&1 \
 		|| { grep -m10 "%Error" "$OUT/build.log"; echo "no build"; exit 1; }
@@ -66,6 +67,10 @@ mem)
 	# Ф3: the memory schemes 0-6 of #FC37 (p4096_mem.py; scheme numbers as arguments: only them)
 	shift; python3 -I "$SIM/p4096_mem.py" "$OUT" "$OUT/obj/tb" "$@"
 	;;
+speed)
+	# the CPU speed as BIOS v4.2 measures it, from the ROM and from the RAM, at 3.5 / 7 / 14 / 14 Original
+	for A in "" "+turbo=1" "+turbo=2" "+turbo=2 +waitp"; do python3 -I "$SIM/p4096_speed.py" "$OUT" "$OUT/obj/tb" $A; done
+	;;
 *)
-	echo "usage: $0 [video|boot|int|modes|mem] [frames | case]"; exit 2 ;;
+	echo "usage: $0 [video|boot|int|modes|mem|speed] [frames | case]"; exit 2 ;;
 esac

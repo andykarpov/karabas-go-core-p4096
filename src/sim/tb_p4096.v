@@ -44,7 +44,7 @@ reg reset = 1'b1;
 
 p4096 dut (
 	.clk(clk), .reset(reset),
-	.turbo(turbo), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
+	.turbo(turbo), .turbo14_wait($test$plusargs("waitp")), .int_firm(firm), .int_xj3(xj3), .nmi(1'b0), .fe37_init(7'h07), .pal_en(1'b1), .fc37_init(fc37), .ff37_init(ff37), .gl_init(gl), .p7_init(8'h00), .dos_init(1'b0),
 	.kbd_a(kbd_a), .kbd_d(5'b11111), .joy(5'b00000), .tape_in(1'b0), .tape_out(tape_out),
 	.mem_a(mem_a), .mem_rd(mem_rd), .mem_wr(mem_wr), .mem_d(mem_d), .mem_oe_n(), .mem_q(mem_q),
 	.rom_req(rom_req), .rom_addr(rom_addr), .rom_wr(rom_wr), .rom_q(rom_q), .rom_done(rom_done),
@@ -142,6 +142,11 @@ initial begin
 	if ($value$plusargs("dump=%s", fname)) begin
 		fd = $fopen(fname, "w");
 		for (i = 0; i < 304 * 768; i = i + 1) $fwrite(fd, "%05x\n", frame_buf[i]);
+		$fclose(fd);
+	end
+	if ($value$plusargs("ramdump5b=%s", fname)) begin    // 5B00..5B03 of page 5 (p4096_speed.py)
+		fd = $fopen(fname, "w");
+		for (i = 0; i < 4; i = i + 1) $fwrite(fd, "%02x\n", ram[5 * 16384 + 16'h1B00 + i]);
 		$fclose(fd);
 	end
 	if ($value$plusargs("pagedump=%s", fname)) begin   // the first 2 bytes of each 16 KB page
