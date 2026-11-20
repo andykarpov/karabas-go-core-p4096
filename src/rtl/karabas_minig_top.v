@@ -343,10 +343,12 @@ assign FT_SPI_MOSI = mcu_ft_spi_on ? mcu_ft_mosi : 1'b1;
 // ---------- OSD switches (core.json "osd" "index"): switch n = softsw[n*8 +: 8] ----------
 wire sw_reset = softsw[0];               // 0 Reset (F12)
 wire sw_magic = softsw[8];               // 1 Magic (F11): NMI
-wire [1:0] sw_cpu = softsw[2*8 +: 2];    // 2 CPU 3.5 / 7 / 14 MHz
-wire sw_int_firm = softsw[3*8];          // 3 INT Pentagon / Firm
-wire sw_int_xj3 = softsw[4*8];           // 4 INT X corr Off / XJ3 (-2 T)
-wire sw_joy_off = softsw[5*8];           // 5 Joystick Kempston / Off
+wire [1:0] sw_cpu = softsw[2*8 +: 2];    // 2 Turbo Off (3.5) / 7 / 14 MHz
+wire [1:0] sw_int = softsw[3*8 +: 2];    // 3 INT Pentagon / Pent -2T / Firm / Firm -2T (bit 1 Firm, bit 0 the XJ3 jumper)
+wire sw_int_firm = sw_int[1];
+wire sw_int_xj3 = sw_int[0];
+wire [2:0] sw_joy_l = softsw[4*8 +: 3];  // 4, 5 Joystick L / R: Kempston / Sinclair1 / Sinclair2 / Cursor / QAOPM / QAOPS
+wire [2:0] sw_joy_r = softsw[5*8 +: 3];  //   (the codes of JOY_TYPE of hid_parser, as core-tsconf / core-profi)
 wire [1:0] hw_btn = mcu_btns[1:0];
 
 // ---------- the ROM loader and the storage (SDRAM) ----------
@@ -380,6 +382,7 @@ always @(posedge clk_bus) magic <= sw_magic | hw_btn[1];
 // ---------- keyboard: USB report -> the Spectrum matrix ----------
 wire [7:0] kbd_a;
 wire [5:0] kbd_do;
+wire [7:0] joy_do;
 hid_parser hid_parser(
 	.CLK				(clk_bus),
 	.RESET			(areset),
@@ -392,13 +395,13 @@ hid_parser hid_parser(
 	.KB_DAT5			(mcu_kbd[55:48]),
 	.KB_SCANCODE	(8'd0),
 	.KB_SCANCODE_UPD(1'b0),
-	.JOY_TYPE_L		(3'd7),          // the joysticks go to Kempston (below), not to the keys
-	.JOY_TYPE_R		(3'd7),
-	.JOY_L			(13'd0),
-	.JOY_R			(13'd0),
+	.JOY_TYPE_L		(sw_joy_l),      // Kempston -> JOY_DO, the others -> keys of the matrix
+	.JOY_TYPE_R		(sw_joy_r),
+	.JOY_L			(mcu_joy_l[12:0]),
+	.JOY_R			(mcu_joy_r[12:0]),
 	.KB_TYPE			(1'b1),
 	.A					(kbd_a),
-	.JOY_DO			(),
+	.JOY_DO			(joy_do),
 	.KB_DO			(kbd_do),
 	.RTC_A			(8'd0),
 	.RTC_DI			(8'd0),
@@ -408,11 +411,9 @@ hid_parser hid_parser(
 	.RTC_RD			(1'b0)
 );
 
-// Kempston (#1F: 000 F U D L R, active high); kg_mcu2: 1 up, 2 down, 3 left, 4 right, 6 A, 7 B; both pads
-wire [15:0] joy_lr = mcu_joy_l | mcu_joy_r;
-reg [4:0] kjoy = 5'd0;
-always @(posedge clk_bus)
-	kjoy <= sw_joy_off ? 5'd0 : {joy_lr[6] | joy_lr[7], joy_lr[1], joy_lr[2], joy_lr[3], joy_lr[4]};
+// Kempston #1F: 000 F U D L R (JOY_DO bits 0..4 of the pad set to Kempston; its bits 5..7, the extra buttons,
+// stay off: Pentagon reads 0 there)
+wire [4:0] kjoy = joy_do[4:0];
 
 // tape in
 reg tape_in_r = 1'b0;

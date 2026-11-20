@@ -26,17 +26,17 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112001",
+            "build": "26112002",
             "bitstream": "karabas_minig.bin"
         }
     },
     "osd": [
         {
             "type": "S",
-            "name": "CPU",
+            "name": "Turbo",
             "index": 2,
             "options": [
-                "3.5 MHz",
+                "Off",
                 "7 MHz",
                 "14 MHz"
             ],
@@ -49,29 +49,39 @@
             "index": 3,
             "options": [
                 "Pentagon",
-                "Firm"
+                "Pent -2T",
+                "Firm",
+                "Firm -2T"
             ],
             "default": 0
         },
         {
             "type": "S",
-            "name": "INT X corr",
+            "name": "Joystick L",
             "index": 4,
             "options": [
-                "Off",
-                "XJ3 -2T"
+                "Kempston",
+                "Sinclair1",
+                "Sinclair2",
+                "Cursor",
+                "QAOPM",
+                "QAOPS"
             ],
             "default": 0
         },
         {
             "type": "S",
-            "name": "Joystick",
+            "name": "Joystick R",
             "index": 5,
             "options": [
                 "Kempston",
-                "Off"
+                "Sinclair1",
+                "Sinclair2",
+                "Cursor",
+                "QAOPM",
+                "QAOPS"
             ],
-            "default": 0
+            "default": 1
         },
         {
             "type": "-"
