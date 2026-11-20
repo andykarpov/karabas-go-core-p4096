@@ -118,6 +118,7 @@ module p4096 (
 	// devices outside the machine on the CPU bus (General Sound of the top): their read data, the highest priority
 	input  wire        ext_int,       // an interrupt of a device outside (the FM timer of the OPL4): /INT, not in TR-DOS
 	output wire        cpu_dos,       // T_DOS (the OPL4 does not answer #7E / #7F there: VG93)
+	input  wire        ext_sel,       // a device outside owns the port (OPL4 #C4 / #C6 / #7E have A0 = 0): not #FE
 	input  wire        ext_oe,
 	input  wire [7:0]  ext_do
 );
@@ -211,10 +212,10 @@ wire p_1ffd = p_fd && a[15:13] == 3'b000;
 wire p_fffd = p_fd && a[15:13] == 3'b111;
 wire p_bffd = p_fd && a[15:13] == 3'b101;
 // #FE / #F6 write: A0 = 0, A2 = 1, A6 = 1; read #FE: A0 = 0
-wire p_fe_w = !a[0] && a[2] && a[6];
+wire p_fe_w = !a[0] && a[2] && a[6] && !ext_sel;
 // Nemo IDE (DD155): A1 = A2 = 0, not TR-DOS; its ports are not the keyboard
 wire p_ide = !a[1] && !a[2] && !dos;
-wire p_fe_r = !a[0] && !p_ide;
+wire p_fe_r = !a[0] && !p_ide && !ext_sel;
 // #xxFF read: A0-A7 all 1 (not in TR-DOS: the system port of the VG93)
 // The TR-DOS ports follow T_DOS. #EFF7 D7 opens the clock (#BFF7 / #DFF7) only: BIOS v4.2 runs with #EFF7 = 82 and
 // finds Kempston and the attribute port #FF, which the gate of the TR-DOS ports (DD70:4 /IODOS) closes, so D7 is

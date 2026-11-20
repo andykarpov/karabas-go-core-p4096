@@ -633,6 +633,7 @@ p4096 p4096 (
 	.cpu_wr_n		(cpu_wr_n),
 	.ext_int			(opl4_irq_r),
 	.cpu_dos			(cpu_dos),
+	.ext_sel			(opl4_sel && !sw_opl4_off),
 	.ext_oe			(gs_oe || opl4_oe),
 	.ext_do			(opl4_oe ? opl4_do_r : gs_do),
 	.cpu_m1_n		(cpu_m1_n),
